@@ -1,0 +1,11 @@
+{
+  "name": "school_teacher_timetable",
+  "version": "1.0.0",
+  "description": "Teacher Timetable & Today Schedule Lambda for School ERP",
+  "main": "index.mjs",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.637.0",
+    "pg": "^8.12.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "school_manage_academic",
+  "version": "1.0.0",
+  "description": "AWS Lambda Academic Module",
+  "main": "index.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "echo \"No tests configured\""
+  },
+  "keywords": [
+    "aws-lambda",
+    "postgresql",
+    "ssm",
+    "academic"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.900.0",
+    "pg": "^8.16.3"
+  }
+}

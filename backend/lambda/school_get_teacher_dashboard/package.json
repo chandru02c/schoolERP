@@ -1,0 +1,11 @@
+{
+  "name": "school_get_teacher_dashboard",
+  "version": "1.0.0",
+  "description": "AWS Lambda for retrieving teacher portal dashboard metrics, timetable, attendance, and exams",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.758.0",
+    "pg": "^8.13.3"
+  }
+}

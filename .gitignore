@@ -1,0 +1,27 @@
+# Ignore all node_modules folders everywhere
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+*.log
+logs/
+
+# Build folders
+build/
+dist/
+coverage/
+
+# Expo / React Native
+.expo/
+.expo-shared/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/

@@ -1,0 +1,13 @@
+{
+  "name": "school_update_teacher",
+  "version": "2.0.0",
+  "description": "AWS Lambda - Update Teacher & Status (Node.js 22.x ES Modules)",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.731.0",
+    "pg": "^8.13.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

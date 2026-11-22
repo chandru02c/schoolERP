@@ -1,0 +1,11 @@
+{
+  "name": "school_calendar",
+  "version": "1.0.0",
+  "description": "School Calendar Lambda for School ERP",
+  "main": "index.mjs",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.637.0",
+    "pg": "^8.12.0"
+  }
+}

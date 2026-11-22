@@ -1,0 +1,11 @@
+{
+  "name": "school_common_profile",
+  "version": "1.0.0",
+  "description": "Common Profile API Lambda for Teacher and Parent in School ERP",
+  "main": "index.mjs",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.637.0",
+    "pg": "^8.12.0"
+  }
+}

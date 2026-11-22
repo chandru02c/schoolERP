@@ -1,0 +1,11 @@
+{
+  "name": "school_get_admin_dashboard",
+  "version": "1.0.0",
+  "description": "AWS Lambda for retrieving unified Admin Dashboard metrics and widgets",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.758.0",
+    "pg": "^8.13.3"
+  }
+}

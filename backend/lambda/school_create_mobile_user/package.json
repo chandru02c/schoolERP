@@ -1,0 +1,12 @@
+{
+  "name": "school_create_mobile_user",
+  "version": "1.0.0",
+  "description": "AWS Lambda — Create Mobile User Login (Teacher & Parent)",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.600.0",
+    "bcryptjs": "^2.4.3",
+    "pg": "^8.12.0"
+  }
+}

@@ -1,0 +1,125 @@
+﻿-- =============================================================================
+-- File: backend/database/seed/organization_seed.sql
+-- Description: Seed script for provisioning tenant organizations in school.organization
+-- Note: Use these sample INSERT queries as a template for manual tenant onboarding.
+-- =============================================================================
+
+-- Sample Organization 1: Primary Demo School (org_id: 1001)
+INSERT INTO school.organization (
+    org_id,
+    org_code,
+    organization_name,
+    organization_type,
+    contact_person,
+    email,
+    phone_number,
+    alternate_phone,
+    website,
+    address_line_1,
+    address_line_2,
+    city,
+    state,
+    country,
+    postal_code,
+    timezone,
+    currency,
+    date_format,
+    academic_year_start_month,
+    logo_url,
+    status,
+    is_active,
+    is_deleted,
+    created_at,
+    updated_at
+) VALUES (
+    1001,
+    'SCH-MAIN-1001',
+    'Springdale International Academy',
+    'School',
+    'Principal Dr. Robert Vance',
+    'admin@springdale.edu',
+    '+91-9876543210',
+    '+91-9876543211',
+    'https://springdale.edu',
+    '123 Education Boulevard',
+    'Knowledge Park Sector 4',
+    'Bengaluru',
+    'Karnataka',
+    'India',
+    '560001',
+    'Asia/Kolkata',
+    'INR',
+    'YYYY-MM-DD',
+    'June',
+    'https://assets.springdale.edu/logo.png',
+    'ACTIVE',
+    TRUE,
+    FALSE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+) ON CONFLICT (org_id) DO UPDATE SET
+    organization_name = EXCLUDED.organization_name,
+    org_code = EXCLUDED.org_code,
+    email = EXCLUDED.email,
+    phone_number = EXCLUDED.phone_number,
+    status = EXCLUDED.status,
+    updated_at = CURRENT_TIMESTAMP;
+
+-- Sample Organization 2: Secondary Branch / Academy (org_id: 1002)
+INSERT INTO school.organization (
+    org_id,
+    org_code,
+    organization_name,
+    organization_type,
+    contact_person,
+    email,
+    phone_number,
+    alternate_phone,
+    website,
+    address_line_1,
+    city,
+    state,
+    country,
+    postal_code,
+    timezone,
+    currency,
+    date_format,
+    academic_year_start_month,
+    status,
+    is_active,
+    is_deleted,
+    created_at,
+    updated_at
+) VALUES (
+    1002,
+    'ACAD-BLR-1002',
+    'Apex Science & Commerce Junior College',
+    'College',
+    'Prof. K. S. Sharma',
+    'contact@apexjuniorcollege.edu',
+    '+91-9123456780',
+    NULL,
+    'https://apexjuniorcollege.edu',
+    '45 Innovation Road',
+    'Hyderabad',
+    'Telangana',
+    'India',
+    '500081',
+    'Asia/Kolkata',
+    'INR',
+    'YYYY-MM-DD',
+    'June',
+    'ACTIVE',
+    TRUE,
+    FALSE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+) ON CONFLICT (org_id) DO UPDATE SET
+    organization_name = EXCLUDED.organization_name,
+    org_code = EXCLUDED.org_code,
+    email = EXCLUDED.email,
+    status = EXCLUDED.status,
+    updated_at = CURRENT_TIMESTAMP;
+
+-- Synchronize sequence with the maximum org_id so auto-generation continues smoothly
+SELECT setval('school.organization_org_id_seq', (SELECT COALESCE(MAX(org_id), 1000) FROM school.organization));

@@ -1,0 +1,13 @@
+{
+  "name": "school_generate_event_media_upload_url",
+  "version": "1.0.0",
+  "description": "AWS Lambda - Generate Pre-Signed URL for Direct S3 Event Image Uploads (Node.js 22.x ES Modules)",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.731.0",
+    "@aws-sdk/s3-request-presigner": "^3.731.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

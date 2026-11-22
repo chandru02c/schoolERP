@@ -1,0 +1,13 @@
+{
+  "name": "school_delete_event",
+  "version": "1.0.0",
+  "description": "AWS Lambda - Soft Delete Event (Node.js 22.x ES Modules)",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.731.0",
+    "pg": "^8.13.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

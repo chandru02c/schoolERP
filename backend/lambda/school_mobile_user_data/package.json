@@ -1,0 +1,15 @@
+{
+  "name": "school_mobile_user_data",
+  "version": "1.0.0",
+  "description": "AWS Lambda — Mobile User Data for School ERP (Teacher/Parent profile, classes, children)",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.600.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.12.0"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "school_mobile_user",
+  "version": "1.0.0",
+  "description": "Unified Mobile Authentication Lambda for School ERP (Teacher & Parent Login and Logout)",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.600.0",
+    "pg": "^8.12.0"
+  }
+}
