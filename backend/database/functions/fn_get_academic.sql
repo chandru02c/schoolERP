@@ -554,7 +554,85 @@ BEGIN
         );
 
     -- =========================================================================
-    -- 11. GET_DASHBOARD_STATS
+    -- 11. GET_CLASS_SUBJECTS (Unified Subject List per Class / Set)
+    -- =========================================================================
+    ELSIF v_action = 'GET_CLASS_SUBJECTS' THEN
+        SELECT COALESCE(jsonb_agg(
+            jsonb_build_object(
+                'subject_name', sub.subject_name,
+                'subject_code', sub.subject_code,
+                'teacher_id', sub.teacher_id,
+                'teacher_name', COALESCE(td.full_name, TRIM(CONCAT(COALESCE(td.first_name, ''), ' ', COALESCE(td.last_name, '')))),
+                'periods_per_week', sub.periods_per_week,
+                'is_class_teacher', (s.class_teacher_id = sub.teacher_id),
+                'academic_set_id', sub.academic_set_id,
+                'class_id', s.class_id,
+                'class_name', cm.class_name,
+                'section', s.section
+            ) ORDER BY sub.subject_name ASC
+        ), '[]'::jsonb)
+        INTO v_data
+        FROM school.subject_teacher_assignment sub
+        JOIN school.academic_set s ON sub.academic_set_id = s.academic_set_id AND sub.org_id = s.org_id
+        LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
+        LEFT JOIN school.teacher_details td ON sub.teacher_id = td.teacher_id AND sub.org_id = td.org_id
+        WHERE sub.org_id = p_org_id
+          AND sub.is_deleted = FALSE
+          AND sub.status = 'ACTIVE'
+          AND (v_target_year_id IS NULL OR sub.academic_year_id = v_target_year_id)
+          AND (p_params->>'class_id' IS NULL OR s.class_id = (p_params->>'class_id')::BIGINT)
+          AND (p_academic_set_id IS NULL OR sub.academic_set_id = p_academic_set_id);
+
+        RETURN jsonb_build_object(
+            'success', TRUE,
+            'action', v_action,
+            'data', v_data,
+            'timestamp', CURRENT_TIMESTAMP
+        );
+
+    -- =========================================================================
+    -- 12. GET_STUDENT_RESULTS (Parent / Student Exam Results View)
+    -- =========================================================================
+    ELSIF v_action = 'GET_STUDENT_RESULTS' THEN
+        IF p_student_id IS NULL OR p_student_id <= 0 THEN
+            RETURN jsonb_build_object('success', FALSE, 'error_code', 'ERR_STUDENT_ID_REQUIRED', 'message', 'student_id is required.', 'timestamp', CURRENT_TIMESTAMP);
+        END IF;
+
+        SELECT COALESCE(jsonb_agg(
+            jsonb_build_object(
+                'exam_id', ex.exam_id,
+                'exam_name', ex.exam_name,
+                'exam_type', ex.exam_type,
+                'exam_date', ex.exam_date,
+                'subject_name', ex.subject_name,
+                'max_marks', ex.max_marks,
+                'passing_marks', ex.passing_marks,
+                'scored_marks', m.scored_marks,
+                'is_absent', COALESCE(m.is_absent, FALSE),
+                'grade', COALESCE(m.grade, CASE WHEN m.scored_marks >= (ex.max_marks * 0.9) THEN 'A+' WHEN m.scored_marks >= (ex.max_marks * 0.75) THEN 'A' WHEN m.scored_marks >= (ex.max_marks * 0.6) THEN 'B' WHEN m.scored_marks >= ex.passing_marks THEN 'C' ELSE 'F' END),
+                'result_status', CASE WHEN COALESCE(m.is_absent, FALSE) THEN 'Fail' WHEN m.scored_marks >= ex.passing_marks THEN 'Pass' ELSE 'Fail' END,
+                'status', ex.status,
+                'remarks', m.remarks
+            ) ORDER BY ex.exam_date DESC, ex.exam_name ASC, ex.subject_name ASC
+        ), '[]'::jsonb)
+        INTO v_data
+        FROM school.student_exam_marks m
+        JOIN school.academic_exam ex ON m.exam_id = ex.exam_id AND m.org_id = ex.org_id
+        WHERE m.student_id = p_student_id
+          AND m.org_id = p_org_id
+          AND m.is_deleted = FALSE
+          AND ex.is_deleted = FALSE;
+
+        RETURN jsonb_build_object(
+            'success', TRUE,
+            'action', v_action,
+            'student_id', p_student_id,
+            'data', v_data,
+            'timestamp', CURRENT_TIMESTAMP
+        );
+
+    -- =========================================================================
+    -- 13. GET_DASHBOARD_STATS
     -- =========================================================================
     ELSIF v_action = 'GET_DASHBOARD_STATS' THEN
         SELECT jsonb_build_object(

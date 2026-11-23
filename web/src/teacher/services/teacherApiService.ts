@@ -677,13 +677,37 @@ export const teacherApiService = {
 
 
   saveExamMarks: async (examId: number, marks: StudentExamMark[]): Promise<boolean> => {
-    return true;
+    try {
+      const payload = marks.map((m) => ({
+        student_id: m.student_id,
+        scored_marks: m.marks_obtained,
+        grade: m.grade,
+        remarks: m.remarks,
+        is_absent: m.grade === 'AB' || m.marks_obtained === null || m.marks_obtained === undefined,
+      }));
+      const res = await apiClient.post<any>('/academic', {
+        action: 'SAVE_STUDENT_MARKS',
+        exam_id: examId,
+        marks: payload,
+      });
+      return res.data?.success ?? true;
+    } catch (e) {
+      console.warn('Failed to save exam marks to backend', e);
+      return false;
+    }
   },
 
   publishExamResults: async (examId: number): Promise<boolean> => {
-    const exam = initialExams.find(e => e.id === examId);
-    if (exam) exam.is_published = true;
-    return true;
+    try {
+      const res = await apiClient.post<any>('/academic', {
+        action: 'PUBLISH_EXAM_MARKS',
+        exam_id: examId,
+      });
+      return res.data?.success ?? true;
+    } catch (e) {
+      console.warn('Failed to publish exam marks to backend', e);
+      return false;
+    }
   },
 
   // ── Study Materials ──

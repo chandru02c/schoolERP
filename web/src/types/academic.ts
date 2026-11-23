@@ -30,6 +30,9 @@ export interface AcademicSet {
   class_teacher_id: number | null;
   class_teacher_name?: string;
   class_teacher_code?: string;
+  class_teacher_subject_name?: string;
+  class_teacher_subject_code?: string;
+  class_teacher_periods_per_week?: number;
   room_number?: string;
   capacity: number;
   status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
@@ -38,6 +41,19 @@ export interface AcademicSet {
   created_at?: string;
   subject_teachers?: SubjectTeacherAssignment[];
   enrolled_students?: EnrolledStudent[];
+}
+
+export interface ClassSubject {
+  subject_name: string;
+  subject_code?: string;
+  teacher_id?: number;
+  teacher_name?: string;
+  periods_per_week?: number;
+  is_class_teacher?: boolean;
+  academic_set_id?: number;
+  class_id?: number;
+  class_name?: string;
+  section?: string;
 }
 
 export interface SubjectTeacherAssignment {
@@ -53,6 +69,7 @@ export interface SubjectTeacherAssignment {
   teacher_name?: string;
   teacher_code?: string;
   periods_per_week: number;
+  is_class_teacher?: boolean;
   room_number?: string;
   enrolled_count?: number;
   status: 'ACTIVE' | 'INACTIVE';
@@ -111,7 +128,7 @@ export interface AcademicExam {
   exam_date: string;
   max_marks: number;
   passing_marks: number;
-  status: 'SCHEDULED' | 'COMPLETED' | 'EVALUATED' | 'CANCELLED';
+  status: 'SCHEDULED' | 'COMPLETED' | 'EVALUATED' | 'PUBLISHED' | 'CANCELLED';
   evaluated_count?: number;
   total_students_count?: number;
   created_at?: string;

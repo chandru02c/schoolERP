@@ -35,6 +35,7 @@ import {
   Refresh as RefreshIcon,
   Save as SaveIcon,
   CheckCircle as CompleteIcon,
+  Publish as PublishIcon,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import dayjs from 'dayjs';
@@ -52,6 +53,7 @@ import {
   saveStudentMarks,
   setSelectedYearId,
 } from '../../redux/slices/academicSlice';
+import { fetchClasses } from '../../redux/slices/classSlice';
 import { academicApi } from '../../api/academicApi';
 import { AcademicExam, StudentExamMark } from '../../types/academic';
 
@@ -60,6 +62,7 @@ export const AcademicExamsPage: React.FC = () => {
   const { years, activeYear, sets, exams, currentExamMarks, selectedYearId, loading } = useSelector(
     (state: RootState) => state.academic
   );
+  const { list: classList } = useSelector((state: RootState) => state.class);
 
   const [selectedSetId, setSelectedSetId] = useState<number>(0);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -68,21 +71,31 @@ export const AcademicExamsPage: React.FC = () => {
 
   const [marksSheet, setMarksSheet] = useState<StudentExamMark[]>([]);
 
-  const [formData, setFormData] = useState({
-    academic_set_id: 0,
-    subject_name: '',
-    exam_name: '',
-    exam_type: 'OFFLINE',
-    exam_date: dayjs().format('YYYY-MM-DD'),
-    max_marks: 100,
-    passing_marks: 35,
-    status: 'SCHEDULED',
-  });
+  // Create Exam form state
+  const [examType, setExamType] = useState<'UNIT_TEST' | 'MID_TERM' | 'FINAL_EXAM' | 'CUSTOM'>('MID_TERM');
+  const [examName, setExamName] = useState<string>('Mid Term Examination');
+  const [selectedClassId, setSelectedClassId] = useState<number>(0);
+  const [globalExamDate, setGlobalExamDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
+  const [defaultMaxMarks, setDefaultMaxMarks] = useState<number>(100);
+  const [defaultPassingMarks, setDefaultPassingMarks] = useState<number>(35);
+  const [configuredSubjects, setConfiguredSubjects] = useState<Array<{
+    academic_set_id?: number;
+    set_name?: string;
+    subject_name: string;
+    subject_code?: string;
+    teacher_id?: number;
+    teacher_name?: string;
+    max_marks: number;
+    passing_marks: number;
+    exam_date: string;
+  }>>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
 
   const currentYearId = selectedYearId || activeYear?.academic_year_id || (years[0]?.academic_year_id ?? 0);
 
   useEffect(() => {
     dispatch(fetchAcademicYears());
+    dispatch(fetchClasses({ limit: 100 }));
   }, [dispatch]);
 
   useEffect(() => {
@@ -92,32 +105,183 @@ export const AcademicExamsPage: React.FC = () => {
     }
   }, [dispatch, currentYearId, selectedSetId]);
 
+  const loadSubjectsForClass = async (classId: number, yearId: number, maxM: number, passM: number, eDate: string) => {
+    if (!classId) {
+      setConfiguredSubjects([]);
+      return;
+    }
+    setLoadingSubjects(true);
+    try {
+      const res = await academicApi.getClassSubjects({ academicYearId: yearId, classId });
+      if (res.data && res.data.length > 0) {
+        setConfiguredSubjects(
+          res.data.map((s: any) => ({
+            academic_set_id: s.academic_set_id,
+            set_name: s.set_name,
+            subject_name: s.subject_name,
+            subject_code: s.subject_code,
+            teacher_id: s.teacher_id,
+            teacher_name: s.teacher_name,
+            max_marks: maxM,
+            passing_marks: passM,
+            exam_date: eDate,
+          }))
+        );
+      } else {
+        setConfiguredSubjects([]);
+      }
+    } catch (err: any) {
+      console.error('Failed to load class subjects', err);
+      toast.error('Could not load subjects for this class');
+    } finally {
+      setLoadingSubjects(false);
+    }
+  };
+
   const handleOpenCreate = () => {
-    setFormData({
-      academic_set_id: selectedSetId || sets[0]?.academic_set_id || 0,
-      subject_name: 'Mathematics',
-      exam_name: 'Mid-Term Examination',
-      exam_type: 'OFFLINE',
-      exam_date: dayjs().format('YYYY-MM-DD'),
-      max_marks: 100,
-      passing_marks: 35,
-      status: 'SCHEDULED',
-    });
+    const initialClassId = classList[0]?.class_id || 0;
+    setSelectedClassId(initialClassId);
+    setExamType('MID_TERM');
+    setExamName('Mid Term Examination');
+    setGlobalExamDate(dayjs().format('YYYY-MM-DD'));
+    setDefaultMaxMarks(100);
+    setDefaultPassingMarks(35);
     setCreateDialogOpen(true);
+
+    if (initialClassId) {
+      loadSubjectsForClass(initialClassId, currentYearId, 100, 35, dayjs().format('YYYY-MM-DD'));
+    }
+  };
+
+  const handleExamTypeChange = (newType: 'UNIT_TEST' | 'MID_TERM' | 'FINAL_EXAM' | 'CUSTOM') => {
+    setExamType(newType);
+    let newName = '';
+    let maxM = 100;
+    let passM = 35;
+    if (newType === 'UNIT_TEST') {
+      newName = 'Unit Test 1';
+      maxM = 50;
+      passM = 18;
+    } else if (newType === 'MID_TERM') {
+      newName = 'Mid Term Examination';
+      maxM = 100;
+      passM = 35;
+    } else if (newType === 'FINAL_EXAM') {
+      newName = 'Final Examination';
+      maxM = 100;
+      passM = 35;
+    } else {
+      newName = '';
+    }
+    setExamName(newName);
+    setDefaultMaxMarks(maxM);
+    setDefaultPassingMarks(passM);
+
+    // Update existing configured subjects with the new defaults
+    setConfiguredSubjects((prev) =>
+      prev.map((s) => ({
+        ...s,
+        max_marks: maxM,
+        passing_marks: passM,
+      }))
+    );
+  };
+
+  const handleClassChange = (classId: number) => {
+    setSelectedClassId(classId);
+    loadSubjectsForClass(classId, currentYearId, defaultMaxMarks, defaultPassingMarks, globalExamDate);
+  };
+
+  const handleSubjectFieldChange = (index: number, field: string, value: any) => {
+    setConfiguredSubjects((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const handleAddManualSubject = () => {
+    setConfiguredSubjects((prev) => [
+      ...prev,
+      {
+        subject_name: '',
+        subject_code: '',
+        max_marks: defaultMaxMarks,
+        passing_marks: defaultPassingMarks,
+        exam_date: globalExamDate,
+      },
+    ]);
+  };
+
+  const handleRemoveSubject = (index: number) => {
+    setConfiguredSubjects((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleCreateSubmit = async () => {
-    if (!formData.academic_set_id || !formData.subject_name || !formData.exam_name || !formData.exam_date) {
-      toast.error('Class Set, Subject, Exam Name, and Date are required.');
+    if (!selectedClassId) {
+      toast.error('Please select a class.');
       return;
     }
-    await dispatch(
-      createAcademicExam({
-        ...formData,
-        academic_year_id: currentYearId,
-      })
-    );
-    setCreateDialogOpen(false);
+    if (!examName.trim()) {
+      toast.error('Exam name is required.');
+      return;
+    }
+    if (configuredSubjects.length === 0) {
+      toast.error('At least one subject must be configured for the exam.');
+      return;
+    }
+    for (const sub of configuredSubjects) {
+      if (!sub.subject_name.trim()) {
+        toast.error('Subject name is required for all configured subjects.');
+        return;
+      }
+      if (!sub.max_marks || sub.max_marks <= 0) {
+        toast.error(`Invalid Maximum Marks for ${sub.subject_name}`);
+        return;
+      }
+      if (sub.passing_marks === undefined || sub.passing_marks < 0) {
+        toast.error(`Invalid Passing Marks for ${sub.subject_name}`);
+        return;
+      }
+    }
+
+    try {
+      await dispatch(
+        createAcademicExam({
+          academic_year_id: currentYearId,
+          class_id: selectedClassId,
+          exam_name: examName.trim(),
+          exam_type: examType,
+          exam_date: globalExamDate,
+          subjects: configuredSubjects.map((s) => ({
+            academic_set_id: s.academic_set_id,
+            subject_name: s.subject_name.trim(),
+            subject_code: s.subject_code?.trim(),
+            teacher_id: s.teacher_id,
+            max_marks: Number(s.max_marks),
+            passing_marks: Number(s.passing_marks),
+            exam_date: s.exam_date || globalExamDate,
+          })),
+        })
+      ).unwrap();
+
+      setCreateDialogOpen(false);
+      dispatch(fetchAcademicExams({ academicYearId: currentYearId, academicSetId: selectedSetId || undefined }));
+    } catch (err: any) {
+      // error is handled by thunk toast
+    }
+  };
+
+  const handlePublishExam = async (examId: number) => {
+    try {
+      const res = await academicApi.publishExamMarks(examId);
+      if (res.success) {
+        toast.success(res.message || 'Exam marks published successfully');
+        dispatch(fetchAcademicExams({ academicYearId: currentYearId, academicSetId: selectedSetId || undefined }));
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to publish exam marks');
+    }
   };
 
   const handleOpenMarksEntry = async (exam: AcademicExam) => {
@@ -298,6 +462,19 @@ export const AcademicExamsPage: React.FC = () => {
             >
               Enter Marks
             </Button>
+            {r.status !== 'PUBLISHED' && (
+              <Tooltip title="Publish Exam Marks to Parents & Students">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="success"
+                  startIcon={<PublishIcon />}
+                  onClick={() => handlePublishExam(r.exam_id)}
+                >
+                  Publish
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip title="Delete Exam">
               <IconButton size="small" color="error" onClick={() => handleDeleteExam(r.exam_id)}>
                 <DeleteIcon fontSize="small" />
@@ -377,96 +554,168 @@ export const AcademicExamsPage: React.FC = () => {
         />
       </AppCard>
 
-      {/* Schedule Exam Dialog */}
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Schedule Academic Exam</DialogTitle>
+      {/* Schedule / Create Exam Dialog */}
+      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Create Academic Exam</DialogTitle>
         <DialogContent dividers>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
-            <TextField
-              select
-              label="Select Class & Section"
-              fullWidth
-              required
-              value={formData.academic_set_id}
-              onChange={(e) => setFormData({ ...formData, academic_set_id: Number(e.target.value) })}
-            >
-              {sets.map((s) => (
-                <MenuItem key={s.academic_set_id} value={s.academic_set_id}>
-                  {s.set_name}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Exam Title (e.g. Unit Test 1, Half-Yearly, Final Exam)"
-              fullWidth
-              required
-              value={formData.exam_name}
-              onChange={(e) => setFormData({ ...formData, exam_name: e.target.value })}
-            />
             <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <TextField
-                  label="Subject Name"
-                  fullWidth
-                  required
-                  value={formData.subject_name}
-                  onChange={(e) => setFormData({ ...formData, subject_name: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={6}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   select
                   label="Exam Type"
                   fullWidth
-                  value={formData.exam_type}
-                  onChange={(e) => setFormData({ ...formData, exam_type: e.target.value })}
+                  value={examType}
+                  onChange={(e) => handleExamTypeChange(e.target.value as any)}
                 >
-                  <MenuItem value="OFFLINE">Offline (Written)</MenuItem>
-                  <MenuItem value="ONLINE">Online</MenuItem>
-                  <MenuItem value="PRACTICAL">Practical / Lab</MenuItem>
-                  <MenuItem value="ORAL">Oral / Viva</MenuItem>
-                  <MenuItem value="ASSIGNMENT">Assignment</MenuItem>
+                  <MenuItem value="UNIT_TEST">Unit Test</MenuItem>
+                  <MenuItem value="MID_TERM">Mid Term</MenuItem>
+                  <MenuItem value="FINAL_EXAM">Final Exam</MenuItem>
+                  <MenuItem value="CUSTOM">Custom Exam</MenuItem>
                 </TextField>
               </Grid>
-            </Grid>
-            <Grid container spacing={2}>
-              <Grid item xs={4}>
+              <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Exam Date"
+                  label="Exam Title"
+                  fullWidth
+                  required
+                  placeholder="e.g. Unit Test 1, Mid Term Examination"
+                  value={examName}
+                  onChange={(e) => setExamName(e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  select
+                  label="Select Class"
+                  fullWidth
+                  required
+                  value={selectedClassId}
+                  onChange={(e) => handleClassChange(Number(e.target.value))}
+                >
+                  {classList.map((c) => (
+                    <MenuItem key={c.class_id} value={c.class_id}>
+                      {c.class_name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Default Exam Date"
                   type="date"
                   fullWidth
                   required
                   InputLabelProps={{ shrink: true }}
-                  value={formData.exam_date}
-                  onChange={(e) => setFormData({ ...formData, exam_date: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={4}>
-                <TextField
-                  label="Max Marks"
-                  type="number"
-                  fullWidth
-                  value={formData.max_marks}
-                  onChange={(e) => setFormData({ ...formData, max_marks: Number(e.target.value) })}
-                />
-              </Grid>
-              <Grid item xs={4}>
-                <TextField
-                  label="Passing Marks"
-                  type="number"
-                  fullWidth
-                  value={formData.passing_marks}
-                  onChange={(e) => setFormData({ ...formData, passing_marks: Number(e.target.value) })}
+                  value={globalExamDate}
+                  onChange={(e) => {
+                    setGlobalExamDate(e.target.value);
+                    setConfiguredSubjects((prev) =>
+                      prev.map((s) => ({ ...s, exam_date: e.target.value }))
+                    );
+                  }}
                 />
               </Grid>
             </Grid>
+
+            {/* Configured Subjects Section */}
+            <Box sx={{ mt: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Configured Subjects for this Exam ({configuredSubjects.length})
+                </Typography>
+                <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={handleAddManualSubject}>
+                  Add Subject
+                </Button>
+              </Box>
+
+              {loadingSubjects ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                  Loading subjects for selected class...
+                </Typography>
+              ) : configuredSubjects.length === 0 ? (
+                <Box sx={{ p: 3, textAlign: 'center', bgcolor: 'background.default', borderRadius: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    No subjects automatically found for this class. Click <strong>Add Subject</strong> to manually add subjects.
+                  </Typography>
+                </Box>
+              ) : (
+                <Table size="small" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
+                      <TableCell sx={{ fontWeight: 700 }}>Subject</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Section / Teacher</TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: 110 }}>Max Marks</TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: 110 }}>Pass Marks</TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: 140 }}>Date</TableCell>
+                      <TableCell align="right" sx={{ width: 50 }}></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {configuredSubjects.map((sub, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            fullWidth
+                            value={sub.subject_name}
+                            onChange={(e) => handleSubjectFieldChange(idx, 'subject_name', e.target.value)}
+                            placeholder="Subject Name"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {sub.set_name ? `Section ${sub.set_name}` : ''}
+                          </Typography>
+                          <Typography variant="body2">
+                            {sub.teacher_name || '-'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={sub.max_marks}
+                            onChange={(e) => handleSubjectFieldChange(idx, 'max_marks', Number(e.target.value))}
+                            inputProps={{ min: 1 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={sub.passing_marks}
+                            onChange={(e) => handleSubjectFieldChange(idx, 'passing_marks', Number(e.target.value))}
+                            inputProps={{ min: 0 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="date"
+                            InputLabelProps={{ shrink: true }}
+                            value={sub.exam_date}
+                            onChange={(e) => handleSubjectFieldChange(idx, 'exam_date', e.target.value)}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <IconButton size="small" color="error" onClick={() => handleRemoveSubject(idx)}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </Box>
           </Box>
         </DialogContent>
 
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleCreateSubmit}>
-            Schedule Exam
+            Save & Create Exam
           </Button>
         </DialogActions>
       </Dialog>

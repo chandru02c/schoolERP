@@ -78,6 +78,11 @@ DECLARE
     v_max_marks NUMERIC(5,2);
     v_passing_marks NUMERIC(5,2);
     v_exam_status VARCHAR(30);
+    v_exam_master_id BIGINT;
+    v_subj_item JSONB;
+    v_target_set_id BIGINT;
+    v_loop_set_id BIGINT;
+    v_exam_count INT := 0;
     v_mark_item JSONB;
     v_marks_saved_count INT := 0;
     v_scored_marks NUMERIC(5,2);
@@ -399,43 +404,117 @@ BEGIN
     -- ASSIGN_CLASS_TEACHER
     ELSIF p_action = 'ASSIGN_CLASS_TEACHER' THEN
         v_set_id := (p_data->>'academic_set_id')::BIGINT;
-        v_class_teacher_id := (p_data->>'class_teacher_id')::BIGINT;
+        v_class_teacher_id := COALESCE((p_data->>'class_teacher_id')::BIGINT, (p_data->>'teacher_id')::BIGINT);
+        v_subject_name := TRIM(COALESCE(p_data->>'subject_name', p_data->>'class_teacher_subject_name', ''));
+        v_subject_code := TRIM(COALESCE(p_data->>'subject_code', p_data->>'class_teacher_subject_code', ''));
+        v_periods_per_week := COALESCE((p_data->>'periods_per_week')::INT, 5);
 
         IF v_set_id IS NULL OR v_set_id <= 0 THEN
             p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_SET_ID_REQUIRED', 'message', 'academic_set_id is required.', 'timestamp', CURRENT_TIMESTAMP);
             RETURN;
         END IF;
 
-        SELECT academic_year_id INTO v_year_id FROM school.academic_set WHERE academic_set_id = v_set_id AND org_id = p_org_id;
-
-        -- Validate single Class Teacher per Academic Set rule
-        IF v_class_teacher_id IS NOT NULL AND v_class_teacher_id > 0 THEN
-            IF EXISTS (
-                SELECT 1 FROM school.academic_set
-                WHERE org_id = p_org_id
-                  AND academic_year_id = v_year_id
-                  AND class_teacher_id = v_class_teacher_id
-                  AND academic_set_id <> v_set_id
-                  AND is_deleted = FALSE
-            ) THEN
-                p_response := jsonb_build_object(
-                    'success', FALSE,
-                    'error_code', 'ERR_TEACHER_ALREADY_ASSIGNED',
-                    'message', 'Teacher is already assigned as Class Teacher for another Academic Set in this session.',
-                    'timestamp', CURRENT_TIMESTAMP
-                );
-                RETURN;
-            END IF;
+        IF v_class_teacher_id IS NULL OR v_class_teacher_id <= 0 THEN
+            p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_CLASS_TEACHER_REQUIRED', 'message', 'Class Teacher is mandatory.', 'timestamp', CURRENT_TIMESTAMP);
+            RETURN;
         END IF;
 
+        IF v_subject_name = '' THEN
+            p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_SUBJECT_NAME_REQUIRED', 'message', 'Subject Name is mandatory for Class Teacher assignment.', 'timestamp', CURRENT_TIMESTAMP);
+            RETURN;
+        END IF;
+
+        IF v_periods_per_week IS NULL OR v_periods_per_week <= 0 THEN
+            p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_PERIODS_REQUIRED', 'message', 'Periods per week is mandatory.', 'timestamp', CURRENT_TIMESTAMP);
+            RETURN;
+        END IF;
+
+        SELECT academic_year_id, class_id INTO v_year_id, v_class_id 
+        FROM school.academic_set WHERE academic_set_id = v_set_id AND org_id = p_org_id;
+
+        -- Validate single Class Teacher per Academic Set rule
+        IF EXISTS (
+            SELECT 1 FROM school.academic_set
+            WHERE org_id = p_org_id
+              AND academic_year_id = v_year_id
+              AND class_teacher_id = v_class_teacher_id
+              AND academic_set_id <> v_set_id
+              AND is_deleted = FALSE
+        ) THEN
+            p_response := jsonb_build_object(
+                'success', FALSE,
+                'error_code', 'ERR_TEACHER_ALREADY_ASSIGNED',
+                'message', 'Teacher is already assigned as Class Teacher for another Academic Set in this session.',
+                'timestamp', CURRENT_TIMESTAMP
+            );
+            RETURN;
+        END IF;
+
+        -- Prevent duplicate subjects within the same class/set
+        IF EXISTS (
+            SELECT 1 FROM school.subject_teacher_assignment
+            WHERE org_id = p_org_id
+              AND academic_set_id = v_set_id
+              AND LOWER(TRIM(subject_name)) = LOWER(TRIM(v_subject_name))
+              AND teacher_id <> v_class_teacher_id
+              AND is_deleted = FALSE
+              AND status = 'ACTIVE'
+        ) THEN
+            p_response := jsonb_build_object(
+                'success', FALSE,
+                'error_code', 'ERR_DUPLICATE_SUBJECT',
+                'message', format('Subject "%s" is already assigned to another teacher in this class.', v_subject_name),
+                'timestamp', CURRENT_TIMESTAMP
+            );
+            RETURN;
+        END IF;
+
+        -- Update school.academic_set
         UPDATE school.academic_set
         SET class_teacher_id = v_class_teacher_id, updated_at = CURRENT_TIMESTAMP, updated_by = p_user_id
         WHERE academic_set_id = v_set_id AND org_id = p_org_id AND is_deleted = FALSE;
 
+        -- Maintain unified class_subject catalog
+        INSERT INTO school.class_subject (
+            org_id, class_id, subject_name, subject_code, status, created_by, updated_by
+        ) VALUES (
+            p_org_id, v_class_id, v_subject_name, NULLIF(v_subject_code, ''), 'ACTIVE', p_user_id, p_user_id
+        )
+        ON CONFLICT (org_id, class_id, subject_name)
+        DO UPDATE SET
+            subject_code = COALESCE(NULLIF(EXCLUDED.subject_code, ''), school.class_subject.subject_code),
+            status = 'ACTIVE',
+            is_deleted = FALSE,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = p_user_id;
+
+        -- Maintain subject_teacher_assignment
+        INSERT INTO school.subject_teacher_assignment (
+            org_id, academic_year_id, academic_set_id, subject_name, subject_code, teacher_id, periods_per_week, status, created_by, updated_by
+        ) VALUES (
+            p_org_id, v_year_id, v_set_id, v_subject_name, NULLIF(v_subject_code, ''), v_class_teacher_id, v_periods_per_week, 'ACTIVE', p_user_id, p_user_id
+        )
+        ON CONFLICT (org_id, academic_set_id, subject_name, teacher_id)
+        DO UPDATE SET
+            subject_code = COALESCE(NULLIF(EXCLUDED.subject_code, ''), school.subject_teacher_assignment.subject_code),
+            periods_per_week = EXCLUDED.periods_per_week,
+            status = 'ACTIVE',
+            is_deleted = FALSE,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = p_user_id
+        RETURNING assignment_id INTO v_assignment_id;
+
         p_response := jsonb_build_object(
             'success', TRUE,
-            'message', 'Class Teacher assigned successfully.',
-            'data', jsonb_build_object('academic_set_id', v_set_id, 'class_teacher_id', v_class_teacher_id),
+            'message', 'Class Teacher and subject assigned successfully.',
+            'data', jsonb_build_object(
+                'academic_set_id', v_set_id,
+                'class_teacher_id', v_class_teacher_id,
+                'subject_name', v_subject_name,
+                'subject_code', v_subject_code,
+                'periods_per_week', v_periods_per_week,
+                'assignment_id', v_assignment_id
+            ),
             'timestamp', CURRENT_TIMESTAMP
         );
         RETURN;
@@ -450,11 +529,12 @@ BEGIN
         v_year_id := (p_data->>'academic_year_id')::BIGINT;
         v_teacher_id := (p_data->>'teacher_id')::BIGINT;
         v_subject_name := TRIM(COALESCE(p_data->>'subject_name', ''));
-        v_subject_code := p_data->>'subject_code';
+        v_subject_code := TRIM(COALESCE(p_data->>'subject_code', ''));
         v_periods_per_week := COALESCE((p_data->>'periods_per_week')::INT, 5);
 
-        IF v_year_id IS NULL THEN
-            SELECT academic_year_id INTO v_year_id FROM school.academic_set WHERE academic_set_id = v_set_id AND org_id = p_org_id;
+        IF v_year_id IS NULL OR v_class_id IS NULL THEN
+            SELECT academic_year_id, class_id INTO v_year_id, v_class_id 
+            FROM school.academic_set WHERE academic_set_id = v_set_id AND org_id = p_org_id;
         END IF;
 
         IF v_set_id IS NULL OR v_teacher_id IS NULL OR v_subject_name = '' THEN
@@ -462,15 +542,53 @@ BEGIN
             RETURN;
         END IF;
 
+        IF v_periods_per_week IS NULL OR v_periods_per_week <= 0 THEN
+            p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_PERIODS_REQUIRED', 'message', 'periods_per_week is required.', 'timestamp', CURRENT_TIMESTAMP);
+            RETURN;
+        END IF;
+
+        -- Prevent duplicate subjects within the same class/set
+        IF EXISTS (
+            SELECT 1 FROM school.subject_teacher_assignment
+            WHERE org_id = p_org_id
+              AND academic_set_id = v_set_id
+              AND LOWER(TRIM(subject_name)) = LOWER(TRIM(v_subject_name))
+              AND teacher_id <> v_teacher_id
+              AND is_deleted = FALSE
+              AND status = 'ACTIVE'
+        ) THEN
+            p_response := jsonb_build_object(
+                'success', FALSE,
+                'error_code', 'ERR_DUPLICATE_SUBJECT',
+                'message', format('Subject "%s" is already assigned to another teacher in this class.', v_subject_name),
+                'timestamp', CURRENT_TIMESTAMP
+            );
+            RETURN;
+        END IF;
+
+        -- Maintain unified class_subject catalog
+        INSERT INTO school.class_subject (
+            org_id, class_id, subject_name, subject_code, status, created_by, updated_by
+        ) VALUES (
+            p_org_id, v_class_id, v_subject_name, NULLIF(v_subject_code, ''), 'ACTIVE', p_user_id, p_user_id
+        )
+        ON CONFLICT (org_id, class_id, subject_name)
+        DO UPDATE SET
+            subject_code = COALESCE(NULLIF(EXCLUDED.subject_code, ''), school.class_subject.subject_code),
+            status = 'ACTIVE',
+            is_deleted = FALSE,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = p_user_id;
+
         -- Upsert subject teacher assignment
         INSERT INTO school.subject_teacher_assignment (
             org_id, academic_year_id, academic_set_id, subject_name, subject_code, teacher_id, periods_per_week, status, created_by, updated_by
         ) VALUES (
-            p_org_id, v_year_id, v_set_id, v_subject_name, v_subject_code, v_teacher_id, v_periods_per_week, 'ACTIVE', p_user_id, p_user_id
+            p_org_id, v_year_id, v_set_id, v_subject_name, NULLIF(v_subject_code, ''), v_teacher_id, v_periods_per_week, 'ACTIVE', p_user_id, p_user_id
         )
         ON CONFLICT (org_id, academic_set_id, subject_name, teacher_id)
         DO UPDATE SET
-            subject_code = EXCLUDED.subject_code,
+            subject_code = COALESCE(NULLIF(EXCLUDED.subject_code, ''), school.subject_teacher_assignment.subject_code),
             periods_per_week = EXCLUDED.periods_per_week,
             status = 'ACTIVE',
             is_deleted = FALSE,
@@ -793,6 +911,121 @@ BEGIN
 
     -- CREATE_EXAM
     ELSIF p_action = 'CREATE_EXAM' THEN
+        -- Check if bulk subjects array is provided (New Exam Management Module)
+        IF p_data ? 'subjects' AND jsonb_array_length(COALESCE(p_data->'subjects', '[]'::jsonb)) > 0 THEN
+            v_exam_name := TRIM(COALESCE(p_data->>'exam_name', ''));
+            v_exam_type := UPPER(TRIM(COALESCE(p_data->>'exam_type', 'UNIT_TEST')));
+            v_year_id := (p_data->>'academic_year_id')::BIGINT;
+            v_class_id := (p_data->>'class_id')::BIGINT;
+            v_set_id := (p_data->>'academic_set_id')::BIGINT;
+            v_exam_count := 0;
+
+            IF v_set_id IS NOT NULL AND v_year_id IS NULL THEN
+                SELECT academic_year_id, class_id INTO v_year_id, v_class_id 
+                FROM school.academic_set WHERE academic_set_id = v_set_id AND org_id = p_org_id;
+            END IF;
+
+            IF v_class_id IS NULL AND v_set_id IS NOT NULL THEN
+                SELECT class_id INTO v_class_id FROM school.academic_set WHERE academic_set_id = v_set_id AND org_id = p_org_id;
+            END IF;
+
+            IF v_exam_name = '' OR v_year_id IS NULL OR v_class_id IS NULL THEN
+                p_response := jsonb_build_object(
+                    'success', FALSE,
+                    'error_code', 'ERR_VALIDATION',
+                    'message', 'exam_name, academic_year_id, and class_id are required.',
+                    'timestamp', CURRENT_TIMESTAMP
+                );
+                RETURN;
+            END IF;
+
+            -- 1. Create or update Exam Master
+            INSERT INTO school.exam_master (
+                org_id, academic_year_id, class_id, exam_name, exam_type, status, is_published, created_by, updated_by
+            ) VALUES (
+                p_org_id, v_year_id, v_class_id, v_exam_name, v_exam_type, 'SCHEDULED', FALSE, p_user_id, p_user_id
+            )
+            ON CONFLICT (org_id, academic_year_id, class_id, exam_name)
+            DO UPDATE SET
+                exam_type = EXCLUDED.exam_type,
+                updated_at = CURRENT_TIMESTAMP,
+                updated_by = p_user_id
+            RETURNING exam_master_id INTO v_exam_master_id;
+
+            -- 2. Configure each subject
+            FOR v_subj_item IN SELECT * FROM jsonb_array_elements(p_data->'subjects')
+            LOOP
+                v_subject_name := TRIM(COALESCE(v_subj_item->>'subject_name', ''));
+                v_subject_code := TRIM(COALESCE(v_subj_item->>'subject_code', ''));
+                v_teacher_id := (v_subj_item->>'teacher_id')::BIGINT;
+                v_max_marks := COALESCE((v_subj_item->>'max_marks')::NUMERIC, 100);
+                v_passing_marks := COALESCE((v_subj_item->>'passing_marks')::NUMERIC, 35);
+                v_exam_date := COALESCE((v_subj_item->>'exam_date')::DATE, CURRENT_DATE);
+                v_target_set_id := (v_subj_item->>'academic_set_id')::BIGINT;
+
+                IF v_target_set_id IS NULL THEN
+                    v_target_set_id := v_set_id;
+                END IF;
+
+                -- If specific set not given, apply to all active sets of this class
+                FOR v_loop_set_id IN 
+                    SELECT academic_set_id FROM school.academic_set 
+                    WHERE org_id = p_org_id AND academic_year_id = v_year_id AND class_id = v_class_id 
+                      AND (v_target_set_id IS NULL OR academic_set_id = v_target_set_id)
+                      AND is_deleted = FALSE
+                LOOP
+                    -- Resolve teacher if not provided
+                    IF v_teacher_id IS NULL OR v_teacher_id <= 0 THEN
+                        SELECT teacher_id INTO v_teacher_id FROM school.subject_teacher_assignment 
+                        WHERE academic_set_id = v_loop_set_id AND LOWER(TRIM(subject_name)) = LOWER(TRIM(v_subject_name)) AND org_id = p_org_id AND is_deleted = FALSE LIMIT 1;
+                    END IF;
+                    IF v_teacher_id IS NULL OR v_teacher_id <= 0 THEN
+                        SELECT class_teacher_id INTO v_teacher_id FROM school.academic_set WHERE academic_set_id = v_loop_set_id AND org_id = p_org_id;
+                    END IF;
+
+                    -- Insert/update exam_subject_config
+                    INSERT INTO school.exam_subject_config (
+                        org_id, exam_master_id, academic_year_id, academic_set_id, subject_name, subject_code, teacher_id, exam_date, max_marks, passing_marks, status, created_by, updated_by
+                    ) VALUES (
+                        p_org_id, v_exam_master_id, v_year_id, v_loop_set_id, v_subject_name, NULLIF(v_subject_code, ''), COALESCE(v_teacher_id, p_user_id), v_exam_date, v_max_marks, v_passing_marks, 'SCHEDULED', p_user_id, p_user_id
+                    )
+                    ON CONFLICT (org_id, exam_master_id, academic_set_id, subject_name)
+                    DO UPDATE SET
+                        teacher_id = COALESCE(EXCLUDED.teacher_id, school.exam_subject_config.teacher_id),
+                        exam_date = EXCLUDED.exam_date,
+                        max_marks = EXCLUDED.max_marks,
+                        passing_marks = EXCLUDED.passing_marks,
+                        updated_at = CURRENT_TIMESTAMP,
+                        updated_by = p_user_id;
+
+                    -- Insert into school.academic_exam for full backward compatibility
+                    -- Use safe fallback for legacy check constraint academic_exam_exam_type_check
+                    INSERT INTO school.academic_exam (
+                        org_id, academic_year_id, academic_set_id, subject_name, teacher_id, exam_name, exam_type, exam_date, max_marks, passing_marks, status, created_by, updated_by
+                    ) VALUES (
+                        p_org_id, v_year_id, v_loop_set_id, v_subject_name, COALESCE(v_teacher_id, p_user_id), v_exam_name, 
+                        CASE 
+                            WHEN v_exam_type IN ('OFFLINE', 'ONLINE', 'PRACTICAL', 'ORAL', 'ASSIGNMENT') THEN v_exam_type
+                            ELSE 'OFFLINE'
+                        END, 
+                        v_exam_date, v_max_marks, v_passing_marks, 'SCHEDULED', p_user_id, p_user_id
+                    )
+                    RETURNING exam_id INTO v_exam_id;
+
+                    v_exam_count := v_exam_count + 1;
+                END LOOP;
+            END LOOP;
+
+            p_response := jsonb_build_object(
+                'success', TRUE,
+                'message', format('Exam "%s" created successfully with %s subject configuration(s).', v_exam_name, v_exam_count),
+                'data', jsonb_build_object('exam_master_id', v_exam_master_id, 'exam_name', v_exam_name, 'configured_count', v_exam_count),
+                'timestamp', CURRENT_TIMESTAMP
+            );
+            RETURN;
+        END IF;
+
+        -- Legacy / Single Subject Exam Creation
         v_year_id := (p_data->>'academic_year_id')::BIGINT;
         v_set_id := (p_data->>'academic_set_id')::BIGINT;
         v_subject_name := TRIM(COALESCE(p_data->>'subject_name', ''));
@@ -820,7 +1053,12 @@ BEGIN
         INSERT INTO school.academic_exam (
             org_id, academic_year_id, academic_set_id, subject_name, teacher_id, exam_name, exam_type, exam_date, max_marks, passing_marks, status, created_by, updated_by
         ) VALUES (
-            p_org_id, v_year_id, v_set_id, v_subject_name, COALESCE(v_teacher_id, p_user_id), v_exam_name, v_exam_type, v_exam_date, v_max_marks, v_passing_marks, v_exam_status, p_user_id, p_user_id
+            p_org_id, v_year_id, v_set_id, v_subject_name, COALESCE(v_teacher_id, p_user_id), v_exam_name, 
+            CASE 
+                WHEN v_exam_type IN ('OFFLINE', 'ONLINE', 'PRACTICAL', 'ORAL', 'ASSIGNMENT') THEN v_exam_type
+                ELSE 'OFFLINE'
+            END, 
+            v_exam_date, v_max_marks, v_passing_marks, v_exam_status, p_user_id, p_user_id
         ) RETURNING exam_id INTO v_exam_id;
 
         p_response := jsonb_build_object(
@@ -843,7 +1081,13 @@ BEGIN
         SET
             exam_name = COALESCE(NULLIF(TRIM(p_data->>'exam_name'), ''), exam_name),
             subject_name = COALESCE(NULLIF(TRIM(p_data->>'subject_name'), ''), subject_name),
-            exam_type = COALESCE(UPPER(NULLIF(TRIM(p_data->>'exam_type'), '')), exam_type),
+            exam_type = COALESCE(
+                CASE 
+                    WHEN UPPER(NULLIF(TRIM(p_data->>'exam_type'), '')) IN ('OFFLINE', 'ONLINE', 'PRACTICAL', 'ORAL', 'ASSIGNMENT') THEN UPPER(TRIM(p_data->>'exam_type'))
+                    ELSE NULL
+                END,
+                exam_type
+            ),
             exam_date = COALESCE((p_data->>'exam_date')::DATE, exam_date),
             max_marks = COALESCE((p_data->>'max_marks')::NUMERIC, max_marks),
             passing_marks = COALESCE((p_data->>'passing_marks')::NUMERIC, passing_marks),
@@ -940,6 +1184,26 @@ BEGIN
             'success', TRUE,
             'message', format('Marks saved for %s student(s).', v_marks_saved_count),
             'data', jsonb_build_object('exam_id', v_exam_id, 'saved_count', v_marks_saved_count),
+            'timestamp', CURRENT_TIMESTAMP
+        );
+        RETURN;
+
+    -- PUBLISH_EXAM_MARKS / SUBMIT_EXAM_MARKS
+    ELSIF p_action IN ('PUBLISH_EXAM_MARKS', 'SUBMIT_EXAM_MARKS') THEN
+        v_exam_id := (p_data->>'exam_id')::BIGINT;
+        IF v_exam_id IS NULL OR v_exam_id <= 0 THEN
+            p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_EXAM_ID_REQUIRED', 'message', 'exam_id is required.', 'timestamp', CURRENT_TIMESTAMP);
+            RETURN;
+        END IF;
+
+        UPDATE school.academic_exam
+        SET status = 'PUBLISHED', updated_at = CURRENT_TIMESTAMP, updated_by = p_user_id
+        WHERE exam_id = v_exam_id AND org_id = p_org_id;
+
+        p_response := jsonb_build_object(
+            'success', TRUE,
+            'message', 'Exam marks published successfully.',
+            'data', jsonb_build_object('exam_id', v_exam_id, 'status', 'PUBLISHED'),
             'timestamp', CURRENT_TIMESTAMP
         );
         RETURN;

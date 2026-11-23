@@ -116,8 +116,7 @@ export const ParentTimetableScreen: React.FC<{ navigation: any }> = ({ navigatio
   return (
     <View style={styles.container}>
       <OrganizationHeader
-        showBack={true}
-        onBack={goHome}
+        showBack={false}
         onProfilePress={() => navigation.navigate('ParentProfileTab')}
       />
 

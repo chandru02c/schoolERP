@@ -118,8 +118,7 @@ export const TeacherCalendarScreen: React.FC<{ navigation: any }> = ({ navigatio
     <View style={styles.container}>
       <OrganizationHeader
         title="Academic Calendar"
-        showBack={true}
-        onBack={goHome}
+        showBack={false}
         onNotificationPress={() => navigation.navigate('TeacherNotifications')}
         onProfilePress={() => navigation.navigate('TeacherProfile')}
       />

@@ -75,7 +75,7 @@ export const TeacherStudentListScreen: React.FC<{ navigation: any }> = ({ naviga
   return (
     <View style={styles.container}>
       <OrganizationHeader
-        title="Student Directory"
+        title="Student List"
         showBack
         onBack={goHome}
         onNotificationPress={() => navigation.navigate('TeacherNotifications')}

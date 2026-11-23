@@ -90,7 +90,11 @@ export const TeacherLoginScreen: React.FC = () => {
           {/* Top Bar with Back Arrow */}
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => navigation.goBack()}
+            onPress={() => {
+              if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+                navigation.goBack();
+              }
+            }}
           >
             <Ionicons name="arrow-back" size={24} color={colors.dark} />
           </TouchableOpacity>

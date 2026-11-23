@@ -81,6 +81,9 @@ export const AcademicSetsPage: React.FC = () => {
     class_id: 0,
     section: 'A',
     class_teacher_id: null as number | null,
+    class_teacher_subject_name: '',
+    class_teacher_subject_code: '',
+    class_teacher_periods_per_week: 5,
     room_number: '',
     capacity: 40,
     status: 'ACTIVE',
@@ -113,6 +116,9 @@ export const AcademicSetsPage: React.FC = () => {
       class_id: classList[0]?.class_id || 0,
       section: 'A',
       class_teacher_id: null,
+      class_teacher_subject_name: '',
+      class_teacher_subject_code: '',
+      class_teacher_periods_per_week: 5,
       room_number: '',
       capacity: 40,
       status: 'ACTIVE',
@@ -127,6 +133,9 @@ export const AcademicSetsPage: React.FC = () => {
       class_id: row.class_id,
       section: row.section,
       class_teacher_id: row.class_teacher_id,
+      class_teacher_subject_name: row.class_teacher_subject_name || '',
+      class_teacher_subject_code: row.class_teacher_subject_code || '',
+      class_teacher_periods_per_week: row.class_teacher_periods_per_week || 5,
       room_number: row.room_number || '',
       capacity: row.capacity || 40,
       status: row.status,
@@ -146,6 +155,16 @@ export const AcademicSetsPage: React.FC = () => {
       toast.error('Class and Section are required.');
       return;
     }
+    if (formData.class_teacher_id) {
+      if (!formData.class_teacher_subject_name?.trim()) {
+        toast.error('Class Teacher assignment requires Subject Name.');
+        return;
+      }
+      if (!formData.class_teacher_periods_per_week || formData.class_teacher_periods_per_week <= 0) {
+        toast.error('Class Teacher assignment requires valid Periods Per Week.');
+        return;
+      }
+    }
     await dispatch(
       createAcademicSet({
         ...formData,
@@ -157,6 +176,16 @@ export const AcademicSetsPage: React.FC = () => {
 
   const handleEditSubmit = async () => {
     if (!selectedSet) return;
+    if (formData.class_teacher_id) {
+      if (!formData.class_teacher_subject_name?.trim()) {
+        toast.error('Class Teacher assignment requires Subject Name.');
+        return;
+      }
+      if (!formData.class_teacher_periods_per_week || formData.class_teacher_periods_per_week <= 0) {
+        toast.error('Class Teacher assignment requires valid Periods Per Week.');
+        return;
+      }
+    }
     await dispatch(
       updateAcademicSet({
         ...formData,
@@ -416,6 +445,45 @@ export const AcademicSetsPage: React.FC = () => {
                 </MenuItem>
               ))}
             </TextField>
+            {Boolean(formData.class_teacher_id) && (
+              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1.5, border: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Class Teacher Subject Allocation (Mandatory)
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={7}>
+                    <TextField
+                      label="Subject Name (Handled by Class Teacher)"
+                      fullWidth
+                      required
+                      value={formData.class_teacher_subject_name}
+                      onChange={(e) => setFormData({ ...formData, class_teacher_subject_name: e.target.value })}
+                      placeholder="e.g. English, Mathematics"
+                    />
+                  </Grid>
+                  <Grid item xs={6} sm={5}>
+                    <TextField
+                      label="Subject Code (Optional)"
+                      fullWidth
+                      value={formData.class_teacher_subject_code}
+                      onChange={(e) => setFormData({ ...formData, class_teacher_subject_code: e.target.value })}
+                      placeholder="e.g. ENG101"
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Periods Per Week"
+                      type="number"
+                      fullWidth
+                      required
+                      value={formData.class_teacher_periods_per_week}
+                      onChange={(e) => setFormData({ ...formData, class_teacher_periods_per_week: Number(e.target.value) })}
+                      inputProps={{ min: 1, max: 40 }}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
             <Grid container spacing={2}>
               <Grid item xs={6}>
                 <TextField
@@ -486,6 +554,45 @@ export const AcademicSetsPage: React.FC = () => {
                 </MenuItem>
               ))}
             </TextField>
+            {Boolean(formData.class_teacher_id) && (
+              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1.5, border: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Class Teacher Subject Allocation (Mandatory)
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={7}>
+                    <TextField
+                      label="Subject Name (Handled by Class Teacher)"
+                      fullWidth
+                      required
+                      value={formData.class_teacher_subject_name}
+                      onChange={(e) => setFormData({ ...formData, class_teacher_subject_name: e.target.value })}
+                      placeholder="e.g. English, Mathematics"
+                    />
+                  </Grid>
+                  <Grid item xs={6} sm={5}>
+                    <TextField
+                      label="Subject Code (Optional)"
+                      fullWidth
+                      value={formData.class_teacher_subject_code}
+                      onChange={(e) => setFormData({ ...formData, class_teacher_subject_code: e.target.value })}
+                      placeholder="e.g. ENG101"
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Periods Per Week"
+                      type="number"
+                      fullWidth
+                      required
+                      value={formData.class_teacher_periods_per_week}
+                      onChange={(e) => setFormData({ ...formData, class_teacher_periods_per_week: Number(e.target.value) })}
+                      inputProps={{ min: 1, max: 40 }}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
             <Grid container spacing={2}>
               <Grid item xs={6}>
                 <TextField
@@ -605,18 +712,28 @@ export const AcademicSetsPage: React.FC = () => {
                   ) : (
                     currentSetDetails.subject_teachers.map((sub) => (
                       <TableRow key={sub.assignment_id}>
-                        <TableCell sx={{ fontWeight: 600 }}>{sub.subject_name}</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>
+                          {sub.subject_name}
+                          {sub.is_class_teacher && (
+                            <Chip label="Class Teacher" size="small" color="primary" sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} />
+                          )}
+                        </TableCell>
                         <TableCell>{sub.subject_code || '-'}</TableCell>
                         <TableCell>{sub.teacher_name} ({sub.teacher_code || `ID: ${sub.teacher_id}`})</TableCell>
                         <TableCell align="center">{sub.periods_per_week}</TableCell>
                         <TableCell align="right">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleRemoveSubjectTeacher(sub.assignment_id)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
+                          <Tooltip title={sub.is_class_teacher ? "Class Teacher subject is managed via Set Details" : "Remove Assignment"}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                disabled={Boolean(sub.is_class_teacher)}
+                                onClick={() => handleRemoveSubjectTeacher(sub.assignment_id)}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     ))

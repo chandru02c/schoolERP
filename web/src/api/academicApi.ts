@@ -15,6 +15,7 @@ import {
   StudentExamMark,
   TeacherAcademicAssignments,
   AcademicDashboardStats,
+  ClassSubject,
 } from '../types/academic';
 
 import { sessionService } from '../utils/sessionService';
@@ -174,6 +175,24 @@ export const academicApi = {
   },
 
   /**
+   * Get all subjects taught in a class or set (Unified Class Teacher + Subject Teacher list)
+   */
+  async getClassSubjects(params: { academicYearId?: number; classId?: number; academicSetId?: number }): Promise<AcademicApiResponse<ClassSubject[]>> {
+    const orgId = getOrgId();
+    const response = await axiosInstance.get<AcademicApiResponse<ClassSubject[]>>('/academic', {
+      params: {
+        action: 'GET_CLASS_SUBJECTS',
+        org_id: orgId,
+        ...(params.academicYearId && { academic_year_id: params.academicYearId }),
+        ...(params.classId && { class_id: params.classId }),
+        ...(params.academicSetId && { academic_set_id: params.academicSetId }),
+      },
+      headers: { org_id: String(orgId) },
+    });
+    return response.data;
+  },
+
+  /**
    * Get marks spreadsheet for an exam
    */
   async getExamMarks(examId: number): Promise<AcademicApiResponse<StudentExamMark[]>> {
@@ -242,17 +261,45 @@ export const academicApi = {
   },
 
   // Academic Set
-  async createSet(data: { academic_year_id: number; class_id: number; section: string; class_teacher_id?: number | null; room_number?: string; capacity?: number; status?: string }) {
+  async createSet(data: {
+    academic_year_id: number;
+    class_id: number;
+    section: string;
+    class_teacher_id?: number | null;
+    subject_name?: string;
+    subject_code?: string;
+    periods_per_week?: number;
+    room_number?: string;
+    capacity?: number;
+    status?: string;
+  }) {
     return this.manageAcademic('CREATE_SET', data);
   },
-  async updateSet(data: { academic_set_id: number; class_id?: number; section?: string; class_teacher_id?: number | null; room_number?: string; capacity?: number; status?: string }) {
+  async updateSet(data: {
+    academic_set_id: number;
+    class_id?: number;
+    section?: string;
+    class_teacher_id?: number | null;
+    subject_name?: string;
+    subject_code?: string;
+    periods_per_week?: number;
+    room_number?: string;
+    capacity?: number;
+    status?: string;
+  }) {
     return this.manageAcademic('UPDATE_SET', data);
   },
   async deleteSet(academic_set_id: number) {
     return this.manageAcademic('DELETE_SET', { academic_set_id });
   },
-  async assignClassTeacher(academic_set_id: number, class_teacher_id: number | null) {
-    return this.manageAcademic('ASSIGN_CLASS_TEACHER', { academic_set_id, class_teacher_id });
+  async assignClassTeacher(data: {
+    academic_set_id: number;
+    class_teacher_id: number;
+    subject_name: string;
+    subject_code?: string;
+    periods_per_week: number;
+  }) {
+    return this.manageAcademic('ASSIGN_CLASS_TEACHER', data);
   },
 
   // Subject Teacher Assignment
@@ -294,7 +341,28 @@ export const academicApi = {
   },
 
   // Exams & Marks
-  async createExam(data: { academic_year_id?: number; academic_set_id: number; subject_name: string; teacher_id?: number; exam_name: string; exam_type?: string; exam_date: string; max_marks?: number; passing_marks?: number; status?: string }) {
+  async createExam(data: {
+    academic_year_id?: number;
+    class_id?: number;
+    academic_set_id?: number;
+    exam_name: string;
+    exam_type?: string;
+    exam_date?: string;
+    subject_name?: string;
+    teacher_id?: number;
+    max_marks?: number;
+    passing_marks?: number;
+    status?: string;
+    subjects?: Array<{
+      subject_name: string;
+      subject_code?: string;
+      teacher_id?: number;
+      academic_set_id?: number;
+      max_marks: number;
+      passing_marks: number;
+      exam_date?: string;
+    }>;
+  }) {
     return this.manageAcademic('CREATE_EXAM', data);
   },
   async updateExam(data: { exam_id: number; exam_name?: string; subject_name?: string; exam_type?: string; exam_date?: string; max_marks?: number; passing_marks?: number; status?: string }) {
@@ -305,5 +373,8 @@ export const academicApi = {
   },
   async saveStudentMarks(data: { exam_id: number; marks: { student_id: number; scored_marks: number; is_absent?: boolean; grade?: string; remarks?: string }[] }) {
     return this.manageAcademic('SAVE_STUDENT_MARKS', data);
+  },
+  async publishExamMarks(exam_id: number) {
+    return this.manageAcademic('PUBLISH_EXAM_MARKS', { exam_id });
   },
 };

@@ -117,7 +117,13 @@ export const handler = async (event) => {
             return respond(400, false, 'academic_set_id is required');
         }
         if (body.class_teacher_id === undefined && body.teacher_id === undefined) {
-            return respond(400, false, 'class_teacher_id is required');
+            return respond(400, false, 'class_teacher_id is mandatory');
+        }
+        if (!body.subject_name && !body.class_teacher_subject_name) {
+            return respond(400, false, 'subject_name is mandatory for Class Teacher assignment');
+        }
+        if (body.periods_per_week === undefined && body.class_teacher_periods_per_week === undefined) {
+            return respond(400, false, 'periods_per_week is mandatory');
         }
     } else if (action === 'ASSIGN_SUBJECT_TEACHER') {
         if (!body.academic_set_id) {
@@ -128,6 +134,9 @@ export const handler = async (event) => {
         }
         if (!body.subject_name && !body.subject_id) {
             return respond(400, false, 'subject_name is required');
+        }
+        if (body.periods_per_week === undefined) {
+            return respond(400, false, 'periods_per_week is required');
         }
     } else if (action === 'REMOVE_SUBJECT_TEACHER') {
         if (!body.assignment_id) {
@@ -168,14 +177,14 @@ export const handler = async (event) => {
             return respond(400, false, 'title is required');
         }
     } else if (action === 'CREATE_EXAM') {
-        if (!body.academic_set_id) {
-            return respond(400, false, 'academic_set_id is required');
-        }
         if (!body.exam_name) {
             return respond(400, false, 'exam_name is required');
         }
-        if (!body.subject_name && !body.subject_id) {
-            return respond(400, false, 'subject_name is required');
+        if (!body.academic_set_id && !body.class_id) {
+            return respond(400, false, 'academic_set_id or class_id is required');
+        }
+        if (!body.subjects && !body.subject_name && !body.subject_id) {
+            return respond(400, false, 'subject_name or subjects array is required');
         }
     } else if (action === 'SAVE_STUDENT_MARKS') {
         if (!body.exam_id) {
@@ -183,6 +192,10 @@ export const handler = async (event) => {
         }
         if (!body.marks || !Array.isArray(body.marks)) {
             return respond(400, false, 'marks is required');
+        }
+    } else if (action === 'PUBLISH_EXAM_MARKS' || action === 'SUBMIT_EXAM_MARKS') {
+        if (!body.exam_id) {
+            return respond(400, false, 'exam_id is required');
         }
     }
 

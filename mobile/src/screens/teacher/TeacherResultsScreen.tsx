@@ -189,7 +189,7 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
   return (
     <View style={styles.container}>
       <OrganizationHeader
-        title="Exam Marks Entry"
+        title="Exam Marks"
         showBack
         onBack={goHome}
         onNotificationPress={() => navigation.navigate('TeacherNotifications')}

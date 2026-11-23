@@ -37,7 +37,14 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* Top bar with back button */}
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+              navigation.goBack();
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.white} />
         </TouchableOpacity>
 
@@ -91,7 +98,11 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
 
               <TouchableOpacity
                 style={styles.cancelBtn}
-                onPress={() => navigation.goBack()}
+                onPress={() => {
+                  if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+                    navigation.goBack();
+                  }
+                }}
               >
                 <Text style={styles.cancelText}>Cancel and Return to Sign In</Text>
               </TouchableOpacity>

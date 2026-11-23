@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser, StudentChild } from '../../context/UserContext';
+import { useAcademic } from '../../context/AcademicContext';
 import { resultService } from '../../services/resultService';
 import { colors } from '../../theme';
 import { useBackToHome } from '../../hooks/useBackToHome';
@@ -34,9 +35,11 @@ import { useBackToHome } from '../../hooks/useBackToHome';
 interface SubjectMarkItem {
   subject_name: string;
   max_marks: number;
+  passing_marks: number;
   scored_marks: number;
   is_absent: boolean;
   grade: string;
+  result_status: string;
 }
 
 interface ExamResultGroup {
@@ -46,12 +49,14 @@ interface ExamResultGroup {
   scored_marks: number;
   percentage: number;
   grade: string;
+  result_status: string;
   subjects: SubjectMarkItem[];
 }
 
 export const ParentResultScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const goHome = useBackToHome(navigation, 'Parent');
   const { childrenList, selectedChild, setSelectedChild } = useUser();
+  const { activeYear } = useAcademic();
   const activeStudent = selectedChild || childrenList[0];
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -66,7 +71,10 @@ export const ParentResultScreen: React.FC<{ navigation: any }> = ({ navigation }
     }
 
     try {
-      const data = await resultService.getStudentResults(activeStudent.student_id);
+      const data = await resultService.getStudentResults(
+        activeStudent.student_id,
+        activeYear?.academic_year_id
+      );
       if (Array.isArray(data?.exams) && data.exams.length > 0) {
         setExams(data.exams);
         setExpandedExam(data.exams[0].exam_name);
@@ -79,9 +87,10 @@ export const ParentResultScreen: React.FC<{ navigation: any }> = ({ navigation }
           scored_marks: 178,
           percentage: 89,
           grade: 'A',
+          result_status: 'Pass',
           subjects: [
-            { subject_name: 'Maths', max_marks: 100, scored_marks: 92, is_absent: false, grade: 'A+' },
-            { subject_name: 'Kannada', max_marks: 100, scored_marks: 86, is_absent: false, grade: 'A' },
+            { subject_name: 'Maths', max_marks: 100, passing_marks: 35, scored_marks: 92, is_absent: false, grade: 'A+', result_status: 'Pass' },
+            { subject_name: 'Kannada', max_marks: 100, passing_marks: 35, scored_marks: 86, is_absent: false, grade: 'A', result_status: 'Pass' },
           ],
         };
         setExams([defaultExam]);
@@ -93,7 +102,7 @@ export const ParentResultScreen: React.FC<{ navigation: any }> = ({ navigation }
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, [activeStudent]);
+  }, [activeStudent, activeYear?.academic_year_id]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -229,7 +238,9 @@ export const ParentResultScreen: React.FC<{ navigation: any }> = ({ navigation }
                   <View style={styles.scoreDivider} />
 
                   <View style={styles.scoreCol}>
-                    <Text style={[styles.scoreVal, { color: colors.success }]}>PASSED</Text>
+                    <Text style={[styles.scoreVal, { color: exam.result_status === 'Pass' ? colors.success : colors.error }]}>
+                      {exam.result_status === 'Pass' ? 'PASSED' : 'FAILED'}
+                    </Text>
                     <Text style={styles.scoreLbl}>Result Status</Text>
                   </View>
                 </View>
@@ -240,34 +251,42 @@ export const ParentResultScreen: React.FC<{ navigation: any }> = ({ navigation }
                     <Text style={styles.breakdownTitle}>Subject-wise Breakdown</Text>
 
                     <View style={styles.subjectTableHeader}>
-                      <Text style={[styles.tableColHeader, { flex: 2 }]}>Subject</Text>
+                      <Text style={[styles.tableColHeader, { flex: 2.2 }]}>Subject</Text>
                       <Text style={[styles.tableColHeader, { flex: 1, textAlign: 'center' }]}>Max</Text>
-                      <Text style={[styles.tableColHeader, { flex: 1, textAlign: 'center' }]}>Scored</Text>
-                      <Text style={[styles.tableColHeader, { flex: 1, textAlign: 'right' }]}>Grade</Text>
+                      <Text style={[styles.tableColHeader, { flex: 1, textAlign: 'center' }]}>Pass</Text>
+                      <Text style={[styles.tableColHeader, { flex: 1.2, textAlign: 'center' }]}>Obtained</Text>
+                      <Text style={[styles.tableColHeader, { flex: 1.2, textAlign: 'right' }]}>Status</Text>
                     </View>
 
-                    {exam.subjects.map((sub, sIdx) => (
-                      <View key={sIdx} style={styles.subjectRow}>
-                        <Text style={[styles.subjectName, { flex: 2 }]}>{sub.subject_name}</Text>
-                        <Text style={[styles.subjectValue, { flex: 1, textAlign: 'center' }]}>{sub.max_marks}</Text>
-                        <Text
-                          style={[
-                            styles.subjectValue,
-                            { flex: 1, textAlign: 'center', fontWeight: '700', color: colors.primary },
-                          ]}
-                        >
-                          {sub.is_absent ? 'AB' : sub.scored_marks}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.subjectGrade,
-                            { flex: 1, textAlign: 'right', color: colors.success },
-                          ]}
-                        >
-                          {sub.grade}
-                        </Text>
-                      </View>
-                    ))}
+                    {exam.subjects.map((sub, sIdx) => {
+                      const isPass = sub.result_status === 'Pass';
+                      const isAbsent = sub.is_absent || sub.result_status === 'Absent';
+                      const statusColor = isAbsent ? colors.warning : isPass ? colors.success : colors.error;
+                      return (
+                        <View key={sIdx} style={styles.subjectRow}>
+                          <Text style={[styles.subjectName, { flex: 2.2 }]}>{sub.subject_name}</Text>
+                          <Text style={[styles.subjectValue, { flex: 1, textAlign: 'center' }]}>{sub.max_marks}</Text>
+                          <Text style={[styles.subjectValue, { flex: 1, textAlign: 'center', color: colors.textSecondary }]}>
+                            {sub.passing_marks}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.subjectValue,
+                              { flex: 1.2, textAlign: 'center', fontWeight: '700', color: colors.primary },
+                            ]}
+                          >
+                            {isAbsent ? 'AB' : sub.scored_marks}
+                          </Text>
+                          <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
+                            <View style={[styles.statusBadge, { backgroundColor: isAbsent ? colors.warningLight : isPass ? colors.successLight : colors.errorLight }]}>
+                              <Text style={[styles.statusBadgeText, { color: statusColor }]}>
+                                {isAbsent ? 'ABSENT' : isPass ? 'PASS' : 'FAIL'}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
 
                     {/* Download Button */}
                     <TouchableOpacity
@@ -533,6 +552,15 @@ const styles = StyleSheet.create({
   subjectGrade: {
     fontSize: 13,
     fontWeight: '800',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   downloadBtn: {
     flexDirection: 'row',

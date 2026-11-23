@@ -48,7 +48,11 @@ export const NotificationCenterScreen: React.FC = () => {
         title="Notifications"
         subtitle={unreadCount > 0 ? `${unreadCount} unread alerts` : 'All caught up'}
         showBack
-        onBackPress={() => navigation.goBack()}
+        onBackPress={() => {
+          if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+            navigation.goBack();
+          }
+        }}
         rightAction={
           unreadCount > 0 ? (
             <TouchableOpacity

@@ -66,7 +66,12 @@ export const TeacherAssignmentPage: React.FC = () => {
   const [assignSubjectDialogOpen, setAssignSubjectDialogOpen] = useState(false);
   const [selectedSet, setSelectedSet] = useState<AcademicSet | null>(null);
 
-  const [classTeacherId, setClassTeacherId] = useState<number | null>(null);
+  const [classTeacherForm, setClassTeacherForm] = useState({
+    teacher_id: null as number | null,
+    subject_name: '',
+    subject_code: '',
+    periods_per_week: 5,
+  });
   const [subjectForm, setSubjectForm] = useState({
     subject_name: '',
     subject_code: '',
@@ -110,7 +115,12 @@ export const TeacherAssignmentPage: React.FC = () => {
 
   const handleOpenAssignClassTeacher = (s: AcademicSet) => {
     setSelectedSet(s);
-    setClassTeacherId(s.class_teacher_id || null);
+    setClassTeacherForm({
+      teacher_id: s.class_teacher_id || null,
+      subject_name: (s as any).class_teacher_subject_name || '',
+      subject_code: (s as any).class_teacher_subject_code || '',
+      periods_per_week: (s as any).class_teacher_periods_per_week || 5,
+    });
     setAssignClassTeacherDialogOpen(true);
   };
 
@@ -127,10 +137,28 @@ export const TeacherAssignmentPage: React.FC = () => {
 
   const handleSaveClassTeacher = async () => {
     if (!selectedSet) return;
+    if (!classTeacherForm.teacher_id) {
+      toast.error('Class Teacher is required.');
+      return;
+    }
+    if (!classTeacherForm.subject_name?.trim()) {
+      toast.error('Subject Name is required for Class Teacher.');
+      return;
+    }
+    if (!classTeacherForm.periods_per_week || classTeacherForm.periods_per_week <= 0) {
+      toast.error('Periods per week is required.');
+      return;
+    }
     try {
-      const res = await academicApi.assignClassTeacher(selectedSet.academic_set_id, classTeacherId);
+      const res = await academicApi.assignClassTeacher({
+        academic_set_id: selectedSet.academic_set_id,
+        class_teacher_id: classTeacherForm.teacher_id,
+        subject_name: classTeacherForm.subject_name.trim(),
+        subject_code: classTeacherForm.subject_code?.trim(),
+        periods_per_week: classTeacherForm.periods_per_week,
+      });
       if (res.success) {
-        toast.success('Class teacher assigned');
+        toast.success('Class teacher and subject assigned successfully');
         dispatch(fetchAcademicSets({ academicYearId: currentYearId }));
         loadSetDetails(selectedSet.academic_set_id);
       }
@@ -322,27 +350,52 @@ export const TeacherAssignmentPage: React.FC = () => {
       </AppCard>
 
       {/* Assign Class Teacher Dialog */}
-      <Dialog open={assignClassTeacherDialogOpen} onClose={() => setAssignClassTeacherDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Assign Class Teacher</DialogTitle>
+      <Dialog open={assignClassTeacherDialogOpen} onClose={() => setAssignClassTeacherDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Assign Class Teacher & Subject</DialogTitle>
         <DialogContent dividers>
-          <Box sx={{ pt: 1 }}>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              Select a faculty member to be the Class Teacher for <strong>{selectedSet?.set_name}</strong>:
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
+            <Typography variant="body2">
+              Class Cohort: <strong>{selectedSet?.set_name}</strong>
             </Typography>
             <TextField
               select
-              label="Class Teacher"
+              label="Select Class Teacher"
               fullWidth
-              value={classTeacherId || ''}
-              onChange={(e) => setClassTeacherId(e.target.value ? Number(e.target.value) : null)}
+              required
+              value={classTeacherForm.teacher_id || ''}
+              onChange={(e) => setClassTeacherForm({ ...classTeacherForm, teacher_id: e.target.value ? Number(e.target.value) : null })}
             >
-              <MenuItem value="">-- None (Remove CT) --</MenuItem>
+              <MenuItem value="">-- Select Class Teacher --</MenuItem>
               {teacherList.map((t) => (
                 <MenuItem key={t.teacher_id} value={t.teacher_id}>
                   {t.full_name || `${t.first_name} ${t.last_name}`} ({t.teacher_code || `ID: ${t.teacher_id}`})
                 </MenuItem>
               ))}
             </TextField>
+            <TextField
+              label="Subject Name (Mandatory)"
+              fullWidth
+              required
+              placeholder="e.g. Mathematics, Science, English"
+              value={classTeacherForm.subject_name}
+              onChange={(e) => setClassTeacherForm({ ...classTeacherForm, subject_name: e.target.value })}
+            />
+            <TextField
+              label="Subject Code (Optional)"
+              fullWidth
+              placeholder="e.g. MATH101"
+              value={classTeacherForm.subject_code}
+              onChange={(e) => setClassTeacherForm({ ...classTeacherForm, subject_code: e.target.value })}
+            />
+            <TextField
+              label="Periods Per Week (Mandatory)"
+              type="number"
+              fullWidth
+              required
+              value={classTeacherForm.periods_per_week}
+              onChange={(e) => setClassTeacherForm({ ...classTeacherForm, periods_per_week: Number(e.target.value) })}
+              inputProps={{ min: 1, max: 40 }}
+            />
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
