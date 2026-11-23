@@ -199,7 +199,18 @@ export const activateAcademicYear = createAsyncThunk(
 
 export const createAcademicSet = createAsyncThunk(
   'academic/createAcademicSet',
-  async (payload: { academic_year_id: number; class_id: number; section: string; class_teacher_id?: number | null; room_number?: string; capacity?: number; status?: string }, { rejectWithValue, dispatch }) => {
+  async (payload: {
+    academic_year_id: number;
+    class_id: number;
+    section: string;
+    class_teacher_id?: number | null;
+    class_teacher_subject_name?: string;
+    class_teacher_subject_code?: string;
+    class_teacher_periods_per_week?: number;
+    room_number?: string;
+    capacity?: number;
+    status?: string;
+  }, { rejectWithValue, dispatch }) => {
     try {
       const response = await academicApi.createSet(payload);
       toast.success(response.message || 'Academic Set created');
@@ -215,7 +226,19 @@ export const createAcademicSet = createAsyncThunk(
 
 export const updateAcademicSet = createAsyncThunk(
   'academic/updateAcademicSet',
-  async (payload: { academic_set_id: number; class_id?: number; section?: string; class_teacher_id?: number | null; room_number?: string; capacity?: number; status?: string; academic_year_id?: number }, { rejectWithValue, dispatch }) => {
+  async (payload: {
+    academic_set_id: number;
+    class_id?: number;
+    section?: string;
+    class_teacher_id?: number | null;
+    class_teacher_subject_name?: string;
+    class_teacher_subject_code?: string;
+    class_teacher_periods_per_week?: number;
+    room_number?: string;
+    capacity?: number;
+    status?: string;
+    academic_year_id?: number;
+  }, { rejectWithValue, dispatch }) => {
     try {
       const response = await academicApi.updateSet(payload);
       toast.success(response.message || 'Academic Set updated');
@@ -329,7 +352,29 @@ export const createCalendarEvent = createAsyncThunk(
 
 export const createAcademicExam = createAsyncThunk(
   'academic/createAcademicExam',
-  async (payload: { academic_year_id?: number; academic_set_id: number; subject_name: string; teacher_id?: number; exam_name: string; exam_type?: string; exam_date: string; max_marks?: number; passing_marks?: number; status?: string }, { rejectWithValue, dispatch }) => {
+  async (payload: {
+    academic_year_id?: number;
+    academic_set_id?: number;
+    class_id?: number;
+    subject_name?: string;
+    teacher_id?: number;
+    exam_name: string;
+    exam_type?: string;
+    exam_date?: string;
+    max_marks?: number;
+    passing_marks?: number;
+    status?: string;
+    subjects?: Array<{
+      subject_name: string;
+      subject_code?: string;
+      teacher_id?: number;
+      max_marks: number;
+      passing_marks: number;
+      exam_date?: string;
+      start_time?: string;
+      end_time?: string;
+    }>;
+  }, { rejectWithValue, dispatch }) => {
     try {
       const response = await academicApi.createExam(payload);
       toast.success(response.message || 'Exam scheduled successfully');

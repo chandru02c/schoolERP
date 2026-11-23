@@ -106,8 +106,7 @@ export const TeacherTimetableScreen: React.FC<{ navigation: any }> = ({ navigati
     <View style={styles.container}>
       <OrganizationHeader
         title="Faculty Timetable"
-        showBack={true}
-        onBack={goHome}
+        showBack={false}
         onNotificationPress={() => navigation.navigate('TeacherNotifications')}
         onProfilePress={() => navigation.navigate('TeacherProfile')}
       />

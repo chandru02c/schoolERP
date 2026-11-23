@@ -76,7 +76,14 @@ export const GlobalSearchScreen: React.FC = () => {
     <SafeAreaView style={styles.safeArea}>
       {/* Search Input Bar */}
       <View style={styles.searchBarRow}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => {
+            if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+              navigation.goBack();
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.dark} />
         </TouchableOpacity>
         <SearchBar

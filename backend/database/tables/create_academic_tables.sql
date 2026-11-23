@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS school.academic_exam (
     subject_name VARCHAR(100) NOT NULL,
     teacher_id BIGINT NOT NULL REFERENCES school.teacher_details(teacher_id) ON DELETE RESTRICT,
     exam_name VARCHAR(150) NOT NULL,
-    exam_type VARCHAR(50) DEFAULT 'OFFLINE' CHECK (exam_type IN ('OFFLINE', 'ONLINE', 'PRACTICAL', 'ORAL', 'ASSIGNMENT')),
+    exam_type VARCHAR(50) DEFAULT 'OFFLINE' CHECK (exam_type IN ('OFFLINE', 'ONLINE', 'PRACTICAL', 'ORAL', 'ASSIGNMENT', 'UNIT_TEST', 'MID_TERM', 'FINAL_EXAM', 'CUSTOM')),
     exam_date DATE NOT NULL,
     max_marks NUMERIC(5,2) NOT NULL,
     passing_marks NUMERIC(5,2) DEFAULT 35,

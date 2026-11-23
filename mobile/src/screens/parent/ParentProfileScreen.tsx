@@ -62,8 +62,7 @@ export const ParentProfileScreen: React.FC<{ navigation: any }> = ({ navigation 
   return (
     <View style={styles.container}>
       <OrganizationHeader
-        showBack={true}
-        onBack={goHome}
+        showBack={false}
         onProfilePress={() => {}}
       />
 

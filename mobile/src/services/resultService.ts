@@ -132,6 +132,28 @@ export const resultService = {
   },
 
   /**
+   * Publish student marks for an exam
+   */
+  async publishExamMarks(examId: number | string): Promise<any> {
+    const session = await storage.getUserSession();
+    const orgId = session?.org_id || APP_CONFIG.defaultOrgId;
+
+    const response = await api.post(
+      '/academic',
+      {
+        action: 'PUBLISH_EXAM_MARKS',
+        org_id: Number(orgId),
+        exam_id: Number(examId),
+      },
+      {
+        headers: { org_id: String(orgId) },
+      }
+    );
+
+    return response.data;
+  },
+
+  /**
    * Create a new exam
    */
   async createExam(payload: {
@@ -167,7 +189,7 @@ export const resultService = {
   /**
    * Fetch results for a student (Parent Results View)
    */
-  async getStudentResults(studentId: number | string): Promise<{
+  async getStudentResults(studentId: number | string, academicYearId?: number | string): Promise<{
     exams: Array<{
       exam_name: string;
       exam_date: string;
@@ -175,12 +197,15 @@ export const resultService = {
       scored_marks: number;
       percentage: number;
       grade: string;
+      result_status: string;
       subjects: Array<{
         subject_name: string;
         max_marks: number;
+        passing_marks: number;
         scored_marks: number;
         is_absent: boolean;
         grade: string;
+        result_status: string;
       }>;
     }>;
   }> {
@@ -188,8 +213,74 @@ export const resultService = {
     const orgId = session?.org_id || APP_CONFIG.defaultOrgId;
 
     try {
-      // Query active year exams
-      const allExams = await this.getExams({ academic_year_id: 6 });
+      // 1. Direct call to GET_STUDENT_RESULTS from backend
+      const response = await api.get('/academic', {
+        params: {
+          action: 'GET_STUDENT_RESULTS',
+          student_id: studentId,
+          org_id: orgId,
+          ...(academicYearId && { academic_year_id: academicYearId }),
+        },
+        headers: { org_id: String(orgId) },
+      });
+
+      const rows = response.data?.data;
+      if (Array.isArray(rows) && rows.length > 0) {
+        // Group by exam_name
+        const grouped: Record<string, any> = {};
+        rows.forEach((item: any) => {
+          const eName = item.exam_name || 'Examination';
+          if (!grouped[eName]) {
+            grouped[eName] = {
+              exam_name: eName,
+              exam_date: item.exam_date || '',
+              total_marks: 0,
+              scored_marks: 0,
+              all_passed: true,
+              subjects: [],
+            };
+          }
+          const max = Number(item.max_marks) || 100;
+          const pass = Number(item.passing_marks) || 35;
+          const scored = Number(item.scored_marks) || 0;
+          const isAbsent = Boolean(item.is_absent);
+          const isPass = !isAbsent && scored >= pass;
+          if (!isPass) {
+            grouped[eName].all_passed = false;
+          }
+
+          grouped[eName].total_marks += max;
+          grouped[eName].scored_marks += scored;
+          grouped[eName].subjects.push({
+            subject_name: item.subject_name || 'Subject',
+            max_marks: max,
+            passing_marks: pass,
+            scored_marks: scored,
+            is_absent: isAbsent,
+            grade: item.grade || (isPass ? 'A' : 'F'),
+            result_status: item.result_status || (isAbsent ? 'Absent' : isPass ? 'Pass' : 'Fail'),
+          });
+        });
+
+        const examResults = Object.values(grouped).map((g: any) => {
+          const pct = g.total_marks > 0 ? Math.round((g.scored_marks / g.total_marks) * 100) : 0;
+          return {
+            exam_name: g.exam_name,
+            exam_date: g.exam_date,
+            total_marks: g.total_marks,
+            scored_marks: g.scored_marks,
+            percentage: pct,
+            grade: pct >= 80 ? 'A+' : pct >= 70 ? 'A' : pct >= 60 ? 'B' : pct >= 35 ? 'C' : 'F',
+            result_status: g.all_passed ? 'Pass' : 'Fail',
+            subjects: g.subjects,
+          };
+        });
+
+        return { exams: examResults };
+      }
+
+      // 2. Fallback to active year exams traversal if GET_STUDENT_RESULTS returned empty
+      const allExams = await this.getExams({ academic_year_id: academicYearId || 6 });
       const studentExamsList: any[] = [];
 
       for (const ex of allExams) {
@@ -197,15 +288,21 @@ export const resultService = {
           const marksData = await this.getExamMarks(ex.exam_id);
           const studentMark = marksData.marks.find((m) => Number(m.student_id) === Number(studentId));
           if (studentMark) {
+            const maxM = Number(ex.max_marks || 100);
+            const passM = Number(ex.passing_marks || 35);
+            const scoredM = Number(studentMark.scored_marks || 0);
+            const isAb = !!studentMark.is_absent;
             studentExamsList.push({
               exam_id: ex.exam_id,
               exam_name: ex.exam_name,
               subject_name: ex.subject_name,
               exam_date: ex.exam_date,
-              max_marks: Number(ex.max_marks || 100),
-              scored_marks: Number(studentMark.scored_marks || 0),
-              is_absent: !!studentMark.is_absent,
-              grade: studentMark.grade || (studentMark.scored_marks >= 75 ? 'A' : studentMark.scored_marks >= 60 ? 'B' : 'C'),
+              max_marks: maxM,
+              passing_marks: passM,
+              scored_marks: scoredM,
+              is_absent: isAb,
+              grade: studentMark.grade || (scoredM >= passM ? 'A' : 'F'),
+              result_status: isAb ? 'Absent' : scoredM >= passM ? 'Pass' : 'Fail',
               remarks: studentMark.remarks,
             });
           }
@@ -222,28 +319,37 @@ export const resultService = {
               exam_date: item.exam_date,
               total_marks: 0,
               scored_marks: 0,
-              percentage: 0,
-              grade: 'A',
+              all_passed: true,
               subjects: [],
             };
+          }
+          if (item.result_status !== 'Pass') {
+            grouped[item.exam_name].all_passed = false;
           }
           grouped[item.exam_name].total_marks += item.max_marks;
           grouped[item.exam_name].scored_marks += item.scored_marks;
           grouped[item.exam_name].subjects.push({
             subject_name: item.subject_name,
             max_marks: item.max_marks,
+            passing_marks: item.passing_marks,
             scored_marks: item.scored_marks,
             is_absent: item.is_absent,
             grade: item.grade,
+            result_status: item.result_status,
           });
         });
 
         const examResults = Object.values(grouped).map((g: any) => {
           const pct = g.total_marks > 0 ? Math.round((g.scored_marks / g.total_marks) * 100) : 0;
           return {
-            ...g,
+            exam_name: g.exam_name,
+            exam_date: g.exam_date,
+            total_marks: g.total_marks,
+            scored_marks: g.scored_marks,
             percentage: pct,
             grade: pct >= 80 ? 'A+' : pct >= 70 ? 'A' : pct >= 60 ? 'B' : pct >= 40 ? 'C' : 'D',
+            result_status: g.all_passed ? 'Pass' : 'Fail',
+            subjects: g.subjects,
           };
         });
 

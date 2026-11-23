@@ -39,9 +39,11 @@ import { assignmentService, AssignmentItem } from '../../services/assignmentServ
 import { notificationService, NotificationItem } from '../../services/notificationService';
 import { eventService, EventItem } from '../../services/eventService';
 import { OrganizationHeader } from '../../components/OrganizationHeader';
+import { useDoubleBackToExit } from '../../hooks/useDoubleBackToExit';
 import { colors } from '../../theme';
 
 export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  useDoubleBackToExit();
   const { user, setActiveStudent } = useAuth();
   const { childrenList, selectedChild, setSelectedChild, refreshChildren } = useUser();
 

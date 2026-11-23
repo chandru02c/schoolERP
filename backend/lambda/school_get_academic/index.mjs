@@ -82,6 +82,8 @@ export const handler = async (event) => {
         return respond(400, false, 'teacher_id is required');
     } else if (action === 'GET_EXAM_MARKS' && !examId) {
         return respond(400, false, 'exam_id is required');
+    } else if (action === 'GET_STUDENT_RESULTS' && !studentId) {
+        return respond(400, false, 'student_id is required');
     }
 
     try {

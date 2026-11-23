@@ -81,8 +81,7 @@ export const TeacherProfileScreen: React.FC<{ navigation: any }> = ({ navigation
     <View style={styles.container}>
       <OrganizationHeader
         title="Faculty Profile"
-        showBack={true}
-        onBack={goHome}
+        showBack={false}
         onNotificationPress={() => navigation.navigate('TeacherNotifications')}
       />
 

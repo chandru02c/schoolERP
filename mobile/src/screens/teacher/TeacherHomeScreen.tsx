@@ -39,9 +39,11 @@ import { eventService, EventItem } from '../../services/eventService';
 import { notificationService, NotificationItem } from '../../services/notificationService';
 import { studentService } from '../../services/studentService';
 import { OrganizationHeader } from '../../components/OrganizationHeader';
+import { useDoubleBackToExit } from '../../hooks/useDoubleBackToExit';
 import { colors } from '../../theme';
 
 export const TeacherHomeScreen = ({ navigation }: any) => {
+  useDoubleBackToExit();
   const { user } = useAuth();
   const { activeYear, selectedSet, assignedSets, setSelectedSet } = useAcademic();
 
