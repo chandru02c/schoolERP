@@ -115,10 +115,28 @@ export interface AssignmentSubmission {
   attachment_url?: string;
 }
 
+export interface ExamSubjectItem {
+  exam_id: number;
+  subject_name: string;
+  teacher_id?: number;
+  teacher_name?: string;
+  max_marks: number;
+  passing_marks: number;
+  exam_date?: string;
+  status?: string;
+  evaluated_count?: number;
+  total_students_count?: number;
+  is_assigned_to_teacher?: boolean;
+}
+
 export interface ExamScheduleItem {
   id: number;
   exam_name: string;
   class_name: string;
+  section?: string;
+  set_name?: string;
+  academic_set_id?: number;
+  academic_year_id?: number;
   subject: string;
   date: string;
   start_time: string;
@@ -127,6 +145,9 @@ export interface ExamScheduleItem {
   pass_marks: number;
   room_no: string;
   is_published: boolean;
+  subjects?: ExamSubjectItem[];
+  evaluated_count?: number;
+  total_students_count?: number;
 }
 
 export interface StudentExamMark {

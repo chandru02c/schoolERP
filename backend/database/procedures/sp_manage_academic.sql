@@ -90,6 +90,11 @@ DECLARE
     v_grade VARCHAR(10);
     v_remarks TEXT;
     v_percentage NUMERIC(5,2);
+    v_req_teacher_id BIGINT;
+    v_exam_teacher_id BIGINT;
+    v_exam_set_id BIGINT;
+    v_exam_subject_name VARCHAR(150);
+    v_set_class_teacher_id BIGINT;
 
 BEGIN
     p_action := UPPER(TRIM(COALESCE(p_action, '')));
@@ -1127,7 +1132,35 @@ BEGIN
             RETURN;
         END IF;
 
-        SELECT max_marks INTO v_max_marks FROM school.academic_exam WHERE exam_id = v_exam_id AND org_id = p_org_id;
+        v_req_teacher_id := COALESCE(NULLIF(p_data->>'teacher_id', '')::BIGINT, NULLIF(p_data->>'user_id', '')::BIGINT);
+
+        SELECT ex.max_marks, ex.teacher_id, ex.academic_set_id, ex.subject_name, s.class_teacher_id
+        INTO v_max_marks, v_exam_teacher_id, v_exam_set_id, v_exam_subject_name, v_set_class_teacher_id
+        FROM school.academic_exam ex
+        JOIN school.academic_set s ON s.academic_set_id = ex.academic_set_id AND s.org_id = ex.org_id
+        WHERE ex.exam_id = v_exam_id AND ex.org_id = p_org_id;
+
+        -- Teacher subject assignment validation
+        IF v_req_teacher_id IS NOT NULL AND v_req_teacher_id > 0 THEN
+            IF COALESCE(v_exam_teacher_id, 0) <> v_req_teacher_id
+               AND COALESCE(v_set_class_teacher_id, 0) <> v_req_teacher_id
+               AND NOT EXISTS (
+                   SELECT 1 FROM school.academic_subject_teacher ast
+                   WHERE ast.org_id = p_org_id 
+                     AND ast.academic_set_id = v_exam_set_id 
+                     AND ast.teacher_id = v_req_teacher_id 
+                     AND (ast.subject_name ILIKE v_exam_subject_name OR ast.is_deleted = FALSE)
+               ) THEN
+                p_response := jsonb_build_object(
+                    'success', FALSE,
+                    'error_code', 'ERR_UNAUTHORIZED',
+                    'message', 'Unauthorized: You are only allowed to enter marks for subjects assigned to you.',
+                    'timestamp', CURRENT_TIMESTAMP
+                );
+                RETURN;
+            END IF;
+        END IF;
+
         v_max_marks := COALESCE(v_max_marks, 100);
 
         FOR v_mark_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_data->'marks', '[]'::jsonb))

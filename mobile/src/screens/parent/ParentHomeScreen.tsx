@@ -35,7 +35,6 @@ import { useAuth, ParentUser } from '../../context/AuthContext';
 import { useUser, StudentChild } from '../../context/UserContext';
 import { attendanceService } from '../../services/attendanceService';
 import { timetableService, TimetablePeriod } from '../../services/timetableService';
-import { assignmentService, AssignmentItem } from '../../services/assignmentService';
 import { notificationService, NotificationItem } from '../../services/notificationService';
 import { eventService, EventItem } from '../../services/eventService';
 import { OrganizationHeader } from '../../components/OrganizationHeader';
@@ -54,7 +53,6 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
     todayStatus: 'PRESENT',
   });
   const [todayPeriods, setTodayPeriods] = useState<TimetablePeriod[]>([]);
-  const [assignments, setAssignments] = useState<AssignmentItem[]>([]);
   const [recentNotifs, setRecentNotifs] = useState<NotificationItem[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -104,15 +102,7 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         setTodayPeriods(tt.todaySchedule || []);
       } catch {}
 
-      // 3. Assignments
-      try {
-        const asg = await assignmentService.getAssignments({
-          class_id: classId,
-        });
-        setAssignments(asg);
-      } catch {}
-
-      // 4. Notifications
+      // 3. Notifications
       try {
         const notifs = await notificationService.getNotifications();
         setRecentNotifs(notifs.slice(0, 2));
@@ -185,14 +175,6 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         badge: 'Routine',
       },
       {
-        id: 'assignments',
-        title: 'Assignments',
-        icon: 'book-outline' as const,
-        route: 'ParentAssignments',
-        color: '#7C3AED',
-        badge: `${assignments.length} Total`,
-      },
-      {
         id: 'results',
         title: 'Results',
         icon: 'trophy-outline' as const,
@@ -225,7 +207,7 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         badge: undefined,
       },
     ],
-    [attendanceSummary.percentage, assignments.length, recentNotifs, upcomingEvents.length]
+    [attendanceSummary.percentage, recentNotifs, upcomingEvents.length]
   );
 
   return (
@@ -338,14 +320,14 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
 
           <TouchableOpacity
             style={styles.statCard}
-            onPress={() => navigation.navigate('ParentAssignments')}
+            onPress={() => navigation.navigate('ParentResults')}
           >
             <View style={[styles.statIconWrap, { backgroundColor: '#F5F3FF' }]}>
-              <Ionicons name="book-outline" size={22} color="#7C3AED" />
+              <Ionicons name="stats-chart-outline" size={22} color="#7C3AED" />
             </View>
-            <Text style={[styles.statNumber, { color: '#7C3AED' }]}>{assignments.length}</Text>
-            <Text style={styles.statLabel}>Homework & Tasks</Text>
-            <Text style={styles.statSubText}>{assignments.filter(a => a.is_submitted).length} Submitted</Text>
+            <Text style={[styles.statNumber, { color: '#7C3AED' }]}>View</Text>
+            <Text style={styles.statLabel}>Exam Results</Text>
+            <Text style={styles.statSubText}>Reports & Performance</Text>
           </TouchableOpacity>
         </View>
 

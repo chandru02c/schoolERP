@@ -25,6 +25,9 @@ import {
   TableRow,
   TableCell,
   TableBody,
+  TableContainer,
+  Paper,
+  Collapse,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -36,6 +39,8 @@ import {
   Save as SaveIcon,
   CheckCircle as CompleteIcon,
   Publish as PublishIcon,
+  KeyboardArrowDown as ExpandMoreIcon,
+  KeyboardArrowRight as ChevronRightIcon,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import dayjs from 'dayjs';
@@ -46,6 +51,7 @@ import DataTable, { Column } from '../../components/common/DataTable';
 import { AppDispatch, RootState } from '../../redux/store';
 import {
   fetchAcademicYears,
+  fetchActiveYear,
   fetchAcademicSets,
   fetchAcademicExams,
   fetchExamMarks,
@@ -90,13 +96,75 @@ export const AcademicExamsPage: React.FC = () => {
     exam_date: string;
   }>>([]);
   const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
+  const [expandedExamKeys, setExpandedExamKeys] = useState<Record<string, boolean>>({});
 
   const currentYearId = selectedYearId || activeYear?.academic_year_id || (years[0]?.academic_year_id ?? 0);
 
   useEffect(() => {
-    dispatch(fetchAcademicYears());
+    dispatch(fetchAcademicYears()).then((res: any) => {
+      if (Array.isArray(res.payload)) {
+        const active = res.payload.find((y: any) => y.status === 'ACTIVE' || y.is_active);
+        if (active) {
+          dispatch(setSelectedYearId(active.academic_year_id));
+        }
+      }
+    });
+    dispatch(fetchActiveYear());
     dispatch(fetchClasses({ limit: 100 }));
   }, [dispatch]);
+
+  const toggleExpandExam = (key: string) => {
+    setExpandedExamKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const groupedExams = useMemo(() => {
+    const map = new Map<string, any>();
+    exams.forEach((ex) => {
+      const key = `${ex.academic_set_id || 0}_${ex.exam_name}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          exam_id: ex.exam_id,
+          exam_name: ex.exam_name,
+          exam_type: ex.exam_type,
+          exam_date: ex.exam_date,
+          academic_set_id: ex.academic_set_id,
+          set_name: ex.set_name,
+          class_name: ex.class_name,
+          section: ex.section,
+          status: ex.status,
+          total_students_count: ex.total_students_count || 0,
+          evaluated_count: 0,
+          subjects: [] as any[],
+        });
+      }
+      const group = map.get(key);
+      const subList = Array.isArray((ex as any).subjects) && (ex as any).subjects.length > 0
+        ? (ex as any).subjects
+        : [
+            {
+              exam_id: ex.exam_id,
+              subject_name: ex.subject_name,
+              teacher_id: (ex as any).teacher_id,
+              teacher_name: (ex as any).teacher_name,
+              max_marks: ex.max_marks,
+              passing_marks: ex.passing_marks,
+              exam_date: ex.exam_date,
+              evaluated_count: ex.evaluated_count || 0,
+              total_students_count: ex.total_students_count || 0,
+              status: ex.status,
+            },
+          ];
+
+      subList.forEach((sub: any) => {
+        if (!group.subjects.some((s: any) => s.exam_id === sub.exam_id)) {
+          group.subjects.push(sub);
+          group.evaluated_count += sub.evaluated_count || 0;
+        }
+      });
+    });
+    return Array.from(map.values());
+  }, [exams]);
 
   useEffect(() => {
     if (currentYearId) {
@@ -543,15 +611,152 @@ export const AcademicExamsPage: React.FC = () => {
       </AppCard>
 
       {/* Exams Directory */}
-      <AppCard title={`Scheduled & Completed Examinations (${exams.length})`}>
-        <DataTable
-          columns={columns}
-          rows={exams}
-          loading={loading}
-          getRowId={(row: any) => row.exam_id}
-          emptyTitle="No examinations scheduled"
-          emptyDescription="No examinations scheduled for this class. Click 'Schedule Exam' to add an exam."
-        />
+      <AppCard title={`Scheduled & Completed Examinations (${groupedExams.length})`}>
+        {groupedExams.length === 0 && !loading ? (
+          <Box py={5} textAlign="center">
+            <Typography variant="body1" fontWeight={600} color="text.secondary">
+              No examinations scheduled
+            </Typography>
+            <Typography variant="caption" color="text.disabled">
+              Click 'Schedule Exam' to configure exams for your classes.
+            </Typography>
+          </Box>
+        ) : (
+          <TableContainer>
+            <Table size="small">
+              <TableHead sx={{ bgcolor: '#F8FAFC' }}>
+                <TableRow>
+                  <TableCell sx={{ width: 50 }} />
+                  <TableCell sx={{ fontWeight: 700 }}>Exam Name & Type</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Class & Section</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Schedule Date</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Subjects</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 700, textAlign: 'right' }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {groupedExams.map((exam) => {
+                  const isExpanded = !!expandedExamKeys[exam.key];
+                  return (
+                    <React.Fragment key={exam.key}>
+                      <TableRow
+                        hover
+                        sx={{
+                          cursor: 'pointer',
+                          bgcolor: isExpanded ? '#F1F5F9' : 'inherit',
+                          '& > *': { borderBottom: 'unset' },
+                        }}
+                        onClick={() => toggleExpandExam(exam.key)}
+                      >
+                        <TableCell>
+                          <IconButton size="small">
+                            {isExpanded ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+                          </IconButton>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>
+                            {exam.exam_name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {exam.exam_type}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={exam.set_name} size="small" variant="outlined" color="primary" />
+                        </TableCell>
+                        <TableCell>
+                          {dayjs(exam.exam_date).isValid() ? dayjs(exam.exam_date).format('DD MMM YYYY') : exam.exam_date}
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={`${exam.subjects.length} Subjects`}
+                            size="small"
+                            sx={{ fontWeight: 700, bgcolor: '#EEF2FF', color: '#4F46E5' }}
+                          />
+                        </TableCell>
+                        <TableCell>{getStatusChip(exam.status)}</TableCell>
+                        <TableCell sx={{ textAlign: 'right' }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }} onClick={(e) => e.stopPropagation()}>
+                            {exam.status !== 'PUBLISHED' && (
+                              <Tooltip title="Publish Results">
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="success"
+                                  startIcon={<PublishIcon />}
+                                  onClick={() => handlePublishExam(exam.exam_id)}
+                                >
+                                  Publish
+                                </Button>
+                              </Tooltip>
+                            )}
+                            <Tooltip title="Delete Exam">
+                              <IconButton size="small" color="error" onClick={() => handleDeleteExam(exam.exam_id)}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+
+                      {/* Expandable nested table of subjects */}
+                      <TableRow>
+                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
+                          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                            <Box sx={{ py: 2, px: 3, bgcolor: '#FAFAFA', borderRadius: 2, my: 1, border: '1px solid #E2E8F0' }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, color: '#1E293B' }}>
+                                Associated Subjects for {exam.exam_name} ({exam.set_name})
+                              </Typography>
+                              <Table size="small">
+                                <TableHead sx={{ bgcolor: '#EDF2F7' }}>
+                                  <TableRow>
+                                    <TableCell sx={{ fontWeight: 700 }}>Subject Name</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Exam Date</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Max / Pass</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Marks Entered</TableCell>
+                                    <TableCell sx={{ fontWeight: 700, textAlign: 'right' }}>Marks Action</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {exam.subjects.map((sub: any) => (
+                                    <TableRow key={sub.exam_id} hover>
+                                      <TableCell sx={{ fontWeight: 600 }}>{sub.subject_name}</TableCell>
+                                      <TableCell>{sub.teacher_name || 'Staff'}</TableCell>
+                                      <TableCell>{dayjs(sub.exam_date).isValid() ? dayjs(sub.exam_date).format('DD MMM YYYY') : sub.exam_date}</TableCell>
+                                      <TableCell>{sub.max_marks} / {sub.passing_marks}</TableCell>
+                                      <TableCell>
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                                          {sub.evaluated_count || 0} / {sub.total_students_count || exam.total_students_count || 0}
+                                        </Typography>
+                                      </TableCell>
+                                      <TableCell sx={{ textAlign: 'right' }}>
+                                        <Button
+                                          size="small"
+                                          variant="contained"
+                                          startIcon={<MarksIcon />}
+                                          onClick={() => handleOpenMarksEntry({ ...exam, ...sub })}
+                                          sx={{ textTransform: 'none', fontWeight: 700 }}
+                                        >
+                                          Enter Marks
+                                        </Button>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </Box>
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    </React.Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </AppCard>
 
       {/* Schedule / Create Exam Dialog */}

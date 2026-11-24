@@ -451,39 +451,104 @@ BEGIN
     -- 9. GET_EXAMS
     -- =========================================================================
     ELSIF v_action = 'GET_EXAMS' THEN
+        WITH exam_subjects AS (
+            SELECT
+                ex.exam_id,
+                ex.org_id,
+                ex.academic_year_id,
+                ex.academic_set_id,
+                ex.exam_name,
+                ex.exam_type,
+                ex.exam_date,
+                ex.subject_name,
+                ex.teacher_id,
+                COALESCE(td.full_name, TRIM(CONCAT(COALESCE(td.first_name, ''), ' ', COALESCE(td.last_name, '')))) AS teacher_name,
+                ex.max_marks,
+                ex.passing_marks,
+                ex.status,
+                (SELECT COUNT(*) FROM school.student_exam_marks m WHERE m.exam_id = ex.exam_id AND m.org_id = ex.org_id AND m.is_deleted = FALSE) AS evaluated_count,
+                (SELECT COUNT(*) FROM school.student_enrollment e WHERE e.academic_set_id = ex.academic_set_id AND e.org_id = ex.org_id AND e.is_deleted = FALSE) AS total_students_count,
+                CASE 
+                    WHEN p_teacher_id IS NULL THEN TRUE
+                    WHEN ex.teacher_id = p_teacher_id THEN TRUE
+                    WHEN s.class_teacher_id = p_teacher_id THEN TRUE
+                    ELSE FALSE
+                END AS is_assigned_to_teacher,
+                COALESCE(cm.class_name, 'Class ' || s.class_id) AS class_name,
+                s.section,
+                CONCAT(COALESCE(cm.class_name, 'Class ' || s.class_id), ' - ', s.section) AS set_name,
+                ex.created_at
+            FROM school.academic_exam ex
+            JOIN school.academic_set s ON ex.academic_set_id = s.academic_set_id AND ex.org_id = s.org_id
+            LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
+            LEFT JOIN school.teacher_details td ON ex.teacher_id = td.teacher_id AND ex.org_id = td.org_id
+            WHERE ex.org_id = p_org_id
+              AND ex.is_deleted = FALSE
+              AND (v_target_year_id IS NULL OR ex.academic_year_id = v_target_year_id)
+              AND (p_academic_set_id IS NULL OR ex.academic_set_id = p_academic_set_id)
+              AND (
+                  p_teacher_id IS NULL 
+                  OR ex.teacher_id = p_teacher_id 
+                  OR s.class_teacher_id = p_teacher_id
+              )
+        ),
+        grouped_exams AS (
+            SELECT
+                MIN(es.exam_id) AS exam_id,
+                es.org_id,
+                es.academic_year_id,
+                es.academic_set_id,
+                es.exam_name,
+                MIN(es.exam_type) AS exam_type,
+                MIN(es.exam_date) AS exam_date,
+                es.class_name,
+                es.section,
+                es.set_name,
+                MIN(es.status) AS status,
+                MAX(es.created_at) AS created_at,
+                MAX(es.total_students_count) AS total_students_count,
+                SUM(es.evaluated_count) AS evaluated_count,
+                STRING_AGG(DISTINCT es.subject_name, ', ' ORDER BY es.subject_name) AS subject_name,
+                jsonb_agg(
+                    jsonb_build_object(
+                        'exam_id', es.exam_id,
+                        'subject_name', es.subject_name,
+                        'teacher_id', es.teacher_id,
+                        'teacher_name', es.teacher_name,
+                        'max_marks', es.max_marks,
+                        'passing_marks', es.passing_marks,
+                        'exam_date', es.exam_date,
+                        'evaluated_count', es.evaluated_count,
+                        'total_students_count', es.total_students_count,
+                        'status', es.status,
+                        'is_assigned_to_teacher', es.is_assigned_to_teacher
+                    ) ORDER BY es.subject_name ASC
+                ) AS subjects
+            FROM exam_subjects es
+            GROUP BY es.org_id, es.academic_year_id, es.academic_set_id, es.exam_name, es.class_name, es.section, es.set_name
+        )
         SELECT COALESCE(jsonb_agg(
             jsonb_build_object(
-                'exam_id', ex.exam_id,
-                'org_id', ex.org_id,
-                'academic_year_id', ex.academic_year_id,
-                'academic_set_id', ex.academic_set_id,
-                'class_name', COALESCE(cm.class_name, 'Class ' || s.class_id),
-                'section', s.section,
-                'set_name', CONCAT(COALESCE(cm.class_name, 'Class ' || s.class_id), ' - ', s.section),
-                'subject_name', ex.subject_name,
-                'teacher_id', ex.teacher_id,
-                'teacher_name', COALESCE(td.full_name, TRIM(CONCAT(COALESCE(td.first_name, ''), ' ', COALESCE(td.last_name, '')))),
-                'exam_name', ex.exam_name,
-                'exam_type', ex.exam_type,
-                'exam_date', ex.exam_date,
-                'max_marks', ex.max_marks,
-                'passing_marks', ex.passing_marks,
-                'status', ex.status,
-                'evaluated_count', (SELECT COUNT(*) FROM school.student_exam_marks m WHERE m.exam_id = ex.exam_id AND m.org_id = ex.org_id AND m.is_deleted = FALSE),
-                'total_students_count', (SELECT COUNT(*) FROM school.student_enrollment e WHERE e.academic_set_id = ex.academic_set_id AND e.org_id = ex.org_id AND e.is_deleted = FALSE),
-                'created_at', ex.created_at
-            ) ORDER BY ex.exam_date DESC
+                'exam_id', ge.exam_id,
+                'org_id', ge.org_id,
+                'academic_year_id', ge.academic_year_id,
+                'academic_set_id', ge.academic_set_id,
+                'class_name', ge.class_name,
+                'section', ge.section,
+                'set_name', ge.set_name,
+                'subject_name', ge.subject_name,
+                'exam_name', ge.exam_name,
+                'exam_type', ge.exam_type,
+                'exam_date', ge.exam_date,
+                'status', ge.status,
+                'evaluated_count', ge.evaluated_count,
+                'total_students_count', ge.total_students_count,
+                'created_at', ge.created_at,
+                'subjects', ge.subjects
+            ) ORDER BY ge.exam_date DESC, ge.exam_name ASC
         ), '[]'::jsonb)
         INTO v_data
-        FROM school.academic_exam ex
-        JOIN school.academic_set s ON ex.academic_set_id = s.academic_set_id AND ex.org_id = s.org_id
-        LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
-        LEFT JOIN school.teacher_details td ON ex.teacher_id = td.teacher_id AND ex.org_id = td.org_id
-        WHERE ex.org_id = p_org_id
-          AND ex.is_deleted = FALSE
-          AND (v_target_year_id IS NULL OR ex.academic_year_id = v_target_year_id)
-          AND (p_academic_set_id IS NULL OR ex.academic_set_id = p_academic_set_id)
-          AND (p_teacher_id IS NULL OR ex.teacher_id = p_teacher_id);
+        FROM grouped_exams ge;
 
         RETURN jsonb_build_object(
             'success', TRUE,

@@ -23,7 +23,11 @@ export interface StudentAttendanceItem {
   roll_no?: string;
   student_code?: string;
   admission_no?: string;
-  status: 'PRESENT' | 'ABSENT' | 'LEAVE' | 'LATE';
+  status: 'PRESENT' | 'ABSENT' | 'HOLIDAY';
+  morning_status?: 'PRESENT' | 'ABSENT' | 'HOLIDAY';
+  afternoon_status?: 'PRESENT' | 'ABSENT' | 'HOLIDAY';
+  morning_remarks?: string;
+  afternoon_remarks?: string;
   remarks?: string;
   student_photo?: string;
   avatar?: string;
@@ -38,9 +42,12 @@ export interface SaveAttendancePayload {
   academic_id?: number | string;
   teacher_id?: number | string;
   status?: 'DRAFT' | 'SUBMITTED';
+  session?: 'MORNING' | 'AFTERNOON' | 'BOTH';
   exceptions: Array<{
     student_id: number;
-    status_code: 'ABSENT' | 'LEAVE' | 'LATE';
+    status_code: 'ABSENT';
+    morning_status?: 'PRESENT' | 'ABSENT' | 'HOLIDAY';
+    afternoon_status?: 'PRESENT' | 'ABSENT' | 'HOLIDAY';
     remarks?: string;
   }>;
 }
@@ -111,9 +118,12 @@ export const attendanceService = {
       academic_year_id: Number(payload.academic_year_id || payload.academic_id || 6),
       teacher_id: Number(teacherId || 1),
       status: payload.status || 'SUBMITTED',
+      session: payload.session || 'BOTH',
       exceptions: payload.exceptions.map((e) => ({
         student_id: Number(e.student_id),
-        status_code: e.status_code === 'LATE' ? 'LEAVE' : e.status_code, // DB check constraint permits ABSENT / LEAVE
+        status_code: 'ABSENT' as const,
+        morning_status: e.morning_status,
+        afternoon_status: e.afternoon_status,
         remarks: e.remarks || '',
       })),
     };

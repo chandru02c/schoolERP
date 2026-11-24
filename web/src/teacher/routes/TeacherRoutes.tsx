@@ -58,9 +58,9 @@ export const TeacherRoutes: React.FC = () => {
 
           <Route path="timetable" element={<PageSuspense><TeacherTimetablePage /></PageSuspense>} />
           <Route path="calendar" element={<PageSuspense><TeacherCalendarPage /></PageSuspense>} />
-          <Route path="assignments" element={<PageSuspense><TeacherAssignmentsPage /></PageSuspense>} />
+          <Route path="assignments" element={<Navigate to="../dashboard" replace />} />
           <Route path="exams" element={<PageSuspense><TeacherExamsPage /></PageSuspense>} />
-          <Route path="materials" element={<PageSuspense><TeacherStudyMaterialsPage /></PageSuspense>} />
+          <Route path="materials" element={<Navigate to="../dashboard" replace />} />
           <Route path="announcements" element={<PageSuspense><TeacherAnnouncementsPage /></PageSuspense>} />
           <Route path="events" element={<PageSuspense><TeacherEventsPage /></PageSuspense>} />
           <Route path="parents" element={<PageSuspense><TeacherParentsPage /></PageSuspense>} />

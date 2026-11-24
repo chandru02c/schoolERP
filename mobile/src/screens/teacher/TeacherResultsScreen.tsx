@@ -6,12 +6,11 @@
  * Exam ↓ Subject ↓ Student List ↓ Marks Entry
  * 
  * Features:
- * - Exam Selection
- * - Subject Selection
- * - Student Marks Entry
- * - Update Marks
- * - Publish Marks
- * - View Existing Marks
+ * - Exam Selection (each exam displayed once)
+ * - Subject Selection with assigned teacher badges
+ * - Subject Access Validation (teacher can only enter marks for assigned subjects)
+ * - Student Marks Entry (with Absent toggle and score validation)
+ * - Update Marks & Publish Marks
  * - Integrated with actual backend /academic endpoints
  */
 
@@ -26,24 +25,39 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useAcademic } from '../../context/AcademicContext';
-import { resultService, ExamItem, StudentExamMarkItem } from '../../services/resultService';
+import { resultService, ExamItem, ExamSubjectItem, StudentExamMarkItem } from '../../services/resultService';
 import { OrganizationHeader } from '../../components/OrganizationHeader';
 import { colors } from '../../theme';
 import { useBackToHome } from '../../hooks/useBackToHome';
 
+interface GroupedExam {
+  key: string;
+  exam_id: number;
+  exam_name: string;
+  class_name?: string;
+  section?: string;
+  set_name?: string;
+  academic_set_id: number;
+  exam_date?: string;
+  subjects: ExamSubjectItem[];
+}
+
 export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const goHome = useBackToHome(navigation, 'Teacher');
   const { user } = useAuth();
-  const { activeYear, selectedSet } = useAcademic();
+  const { activeYear } = useAcademic();
 
   const [exams, setExams] = useState<ExamItem[]>([]);
-  const [selectedExam, setSelectedExam] = useState<ExamItem | null>(null);
+  const [selectedExam, setSelectedExam] = useState<GroupedExam | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<ExamSubjectItem | null>(null);
   const [marksList, setMarksList] = useState<StudentExamMarkItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoadingMarks, setIsLoadingMarks] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [examModalVisible, setExamModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,42 +71,117 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
       const yearId = activeYear?.academic_year_id || 6;
       const data = await resultService.getExams({
         academic_year_id: yearId,
+        teacher_id: teacherId,
       });
 
       setExams(data);
-      if (data.length > 0) {
-        setSelectedExam(data[0]);
-      }
     } catch (err) {
       console.warn('[TeacherResultsScreen] Load exams error:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [activeYear?.academic_year_id]);
+  }, [activeYear?.academic_year_id, teacherId]);
 
   useEffect(() => {
     loadExams();
   }, [loadExams]);
 
-  // Load Student Marks for selected exam
+  // Group exams so each unique exam is displayed only once
+  const groupedExams = useMemo(() => {
+    const map = new Map<string, GroupedExam>();
+
+    exams.forEach((ex) => {
+      const key = `${ex.academic_set_id || 0}_${ex.exam_name}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          exam_id: ex.exam_id,
+          exam_name: ex.exam_name,
+          class_name: ex.class_name,
+          section: ex.section,
+          set_name: ex.set_name || (ex.section ? `${ex.class_name || ''} - ${ex.section}` : ex.class_name),
+          academic_set_id: ex.academic_set_id,
+          exam_date: ex.exam_date,
+          subjects: [],
+        });
+      }
+
+      const group = map.get(key)!;
+      const subList: ExamSubjectItem[] = Array.isArray(ex.subjects) && ex.subjects.length > 0
+        ? ex.subjects
+        : [
+            {
+              exam_id: ex.exam_id,
+              subject_name: ex.subject_name,
+              teacher_id: ex.teacher_id,
+              teacher_name: ex.teacher_name,
+              max_marks: ex.max_marks || 100,
+              passing_marks: ex.passing_marks || 35,
+              exam_date: ex.exam_date,
+              status: ex.status,
+              evaluated_count: ex.evaluated_count || 0,
+              total_students_count: ex.total_students_count || 0,
+              is_assigned_to_teacher: ex.is_assigned_to_teacher ?? true,
+            },
+          ];
+
+      subList.forEach((sub) => {
+        if (!group.subjects.some((s) => s.exam_id === sub.exam_id)) {
+          group.subjects.push(sub);
+        }
+      });
+    });
+
+    return Array.from(map.values());
+  }, [exams]);
+
+  // Set default selected exam & subject once groupedExams are loaded
+  useEffect(() => {
+    if (groupedExams.length > 0 && !selectedExam) {
+      const first = groupedExams[0];
+      setSelectedExam(first);
+      if (first.subjects.length > 0) {
+        // Prefer assigned subject if available
+        const assigned = first.subjects.find((s) => s.is_assigned_to_teacher !== false) || first.subjects[0];
+        setSelectedSubject(assigned);
+      }
+    }
+  }, [groupedExams, selectedExam]);
+
+  // Check if logged-in teacher is assigned to enter marks for selected subject
+  const isAssigned = useMemo(() => {
+    if (!selectedSubject) return false;
+    if (selectedSubject.is_assigned_to_teacher === true) return true;
+    if (selectedSubject.is_assigned_to_teacher === false) return false;
+    if (selectedSubject.teacher_id && teacherId) {
+      return Number(selectedSubject.teacher_id) === Number(teacherId);
+    }
+    return true;
+  }, [selectedSubject, teacherId]);
+
+  // Load Student Marks for selected subject's exam_id
   const loadExamMarks = useCallback(async (examId: number) => {
+    setIsLoadingMarks(true);
     try {
       const res = await resultService.getExamMarks(examId);
       setMarksList(res.marks || []);
     } catch (err) {
       console.warn('[TeacherResultsScreen] Load marks error:', err);
+    } finally {
+      setIsLoadingMarks(false);
     }
   }, []);
 
   useEffect(() => {
-    if (selectedExam?.exam_id) {
-      loadExamMarks(selectedExam.exam_id);
+    if (selectedSubject?.exam_id) {
+      loadExamMarks(selectedSubject.exam_id);
     }
-  }, [selectedExam?.exam_id, loadExamMarks]);
+  }, [selectedSubject?.exam_id, loadExamMarks]);
 
   // Update mark in state
   const handleScoreChange = (studentId: number, scoreText: string) => {
-    const max = selectedExam?.max_marks || 100;
+    if (!isAssigned) return;
+    const max = selectedSubject?.max_marks || 100;
     const parsed = parseInt(scoreText, 10);
     const validScore = isNaN(parsed) ? 0 : Math.min(max, Math.max(0, parsed));
 
@@ -116,6 +205,7 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
 
   // Toggle student absent status
   const handleToggleAbsent = (studentId: number) => {
+    if (!isAssigned) return;
     setMarksList((prev) =>
       prev.map((m) => {
         if (m.student_id === studentId) {
@@ -132,14 +222,24 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
     );
   };
 
-  // Save Marks via POST /academic
+  // Save Marks via POST /academic with teacher authorization validation
   const handleSaveMarks = async () => {
-    if (!selectedExam) return;
+    if (!selectedSubject) return;
+
+    // Strict access check
+    if (!isAssigned) {
+      Alert.alert(
+        'Access Restricted',
+        `You are only authorized to enter marks for subjects assigned to you. (${selectedSubject.subject_name} is assigned to ${selectedSubject.teacher_name || 'another teacher'}).`
+      );
+      return;
+    }
 
     setIsSaving(true);
     try {
-      await resultService.saveStudentMarks({
-        exam_id: selectedExam.exam_id,
+      const res = await resultService.saveStudentMarks({
+        exam_id: selectedSubject.exam_id,
+        teacher_id: teacherId,
         marks: marksList.map((m) => ({
           student_id: m.student_id,
           scored_marks: m.scored_marks,
@@ -149,10 +249,15 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
         })),
       });
 
+      if (res?.success === false) {
+        throw new Error(res?.message || 'Failed to save marks');
+      }
+
       Alert.alert(
         'Marks Saved',
-        `Marks for ${selectedExam.exam_name} (${selectedExam.subject_name}) have been recorded successfully.`
+        `Marks for ${selectedExam?.exam_name} (${selectedSubject.subject_name}) have been recorded successfully.`
       );
+      loadExams();
     } catch (err: any) {
       Alert.alert('Save Failed', err.message || 'Unable to update student marks.');
     } finally {
@@ -162,14 +267,26 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
 
   // Publish Marks
   const handlePublishMarks = async () => {
-    if (!selectedExam) return;
+    if (!selectedSubject) return;
+    if (!isAssigned) {
+      Alert.alert('Access Restricted', 'You can only publish marks for your assigned subjects.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       await handleSaveMarks();
+      const pubRes = await resultService.publishExamMarks(selectedSubject.exam_id);
+      if (pubRes?.success === false) {
+        throw new Error(pubRes?.message || 'Failed to publish marks');
+      }
       Alert.alert(
         'Results Published',
-        `Marks for ${selectedExam.exam_name} are published and accessible to parents and students.`
+        `Marks for ${selectedExam?.exam_name} (${selectedSubject.subject_name}) are published and accessible to parents and students.`
       );
+      loadExams();
+    } catch (err: any) {
+      Alert.alert('Publish Failed', err.message || 'Unable to publish marks.');
     } finally {
       setIsSaving(false);
     }
@@ -196,7 +313,7 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
         onProfilePress={() => navigation.navigate('TeacherProfile')}
       />
 
-      {/* Exam & Subject Selection Header Card */}
+      {/* Examination Selector Card */}
       <View style={styles.selectorCard}>
         <View style={styles.selectorRow}>
           <View style={styles.selectorLeft}>
@@ -207,7 +324,7 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
               activeOpacity={0.8}
             >
               <Text style={styles.dropdownText} numberOfLines={1}>
-                {selectedExam?.exam_name || 'Select Examination'}
+                {selectedExam ? `${selectedExam.exam_name} (${selectedExam.set_name})` : 'Select Examination'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={colors.primary} />
             </TouchableOpacity>
@@ -217,20 +334,85 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
         {selectedExam && (
           <View style={styles.examMetaBar}>
             <View style={styles.metaBadge}>
-              <Ionicons name="book-outline" size={12} color={colors.primary} style={{ marginRight: 4 }} />
-              <Text style={styles.metaBadgeText}>{selectedExam.subject_name}</Text>
-            </View>
-            <View style={styles.metaBadge}>
               <Ionicons name="school-outline" size={12} color={colors.primary} style={{ marginRight: 4 }} />
-              <Text style={styles.metaBadgeText}>{selectedExam.class_name} - {selectedExam.section}</Text>
+              <Text style={styles.metaBadgeText}>{selectedExam.set_name}</Text>
             </View>
             <View style={styles.metaBadge}>
-              <Ionicons name="stats-chart-outline" size={12} color={colors.primary} style={{ marginRight: 4 }} />
-              <Text style={styles.metaBadgeText}>Max: {selectedExam.max_marks}</Text>
+              <Ionicons name="layers-outline" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+              <Text style={styles.metaBadgeText}>{selectedExam.subjects.length} Subjects</Text>
             </View>
+            {selectedExam.exam_date ? (
+              <View style={styles.metaBadge}>
+                <Ionicons name="calendar-outline" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+                <Text style={styles.metaBadgeText}>{selectedExam.exam_date}</Text>
+              </View>
+            ) : null}
           </View>
         )}
       </View>
+
+      {/* Subject Selector Bar */}
+      {selectedExam && selectedExam.subjects.length > 0 && (
+        <View style={styles.subjectContainer}>
+          <Text style={styles.subjectHeaderLabel}>Select Subject to Enter Marks:</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.subjectScroll}
+          >
+            {selectedExam.subjects.map((sub) => {
+              const isSelected = selectedSubject?.exam_id === sub.exam_id;
+              const hasAccess =
+                sub.is_assigned_to_teacher === true ||
+                (sub.is_assigned_to_teacher !== false && (!sub.teacher_id || Number(sub.teacher_id) === Number(teacherId)));
+
+              return (
+                <TouchableOpacity
+                  key={sub.exam_id}
+                  style={[
+                    styles.subjectChip,
+                    isSelected && styles.subjectChipSelected,
+                    !hasAccess && styles.subjectChipRestricted,
+                  ]}
+                  onPress={() => setSelectedSubject(sub)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={hasAccess ? 'book-outline' : 'lock-closed'}
+                    size={13}
+                    color={isSelected ? colors.white : hasAccess ? colors.primary : colors.textMuted}
+                    style={{ marginRight: 5 }}
+                  />
+                  <Text
+                    style={[
+                      styles.subjectChipText,
+                      isSelected && styles.subjectChipTextSelected,
+                      !hasAccess && styles.subjectChipTextRestricted,
+                    ]}
+                  >
+                    {sub.subject_name}
+                  </Text>
+                  {!hasAccess && (
+                    <Text style={[styles.lockTag, isSelected && { color: '#FEE2E2' }]}>
+                      (Locked)
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Authorization Alert Banner */}
+      {selectedSubject && !isAssigned && (
+        <View style={styles.restrictedBanner}>
+          <Ionicons name="shield-outline" size={18} color="#B91C1C" style={{ marginRight: 8 }} />
+          <Text style={styles.restrictedBannerText}>
+            Restricted: You are not assigned to {selectedSubject.subject_name}. (Assigned: {selectedSubject.teacher_name || 'Faculty'}). Viewing mode only.
+          </Text>
+        </View>
+      )}
 
       {/* Search Bar */}
       <View style={styles.searchRow}>
@@ -247,7 +429,7 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
       </View>
 
       {/* Student Marks List */}
-      {isLoading ? (
+      {isLoading || isLoadingMarks ? (
         <View style={styles.loadingCenter}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Fetching examination roster...</Text>
@@ -270,7 +452,7 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
             <View style={styles.studentMarkCard}>
               <View style={styles.markCardLeft}>
                 <View style={styles.rollBadge}>
-                  <Text style={styles.rollBadgeText}>{item.roll_number || '01'}</Text>
+                  <Text style={styles.rollBadgeText}>{item.roll_number || item.roll_no || '01'}</Text>
                 </View>
                 <View style={styles.studentInfoCol}>
                   <Text style={styles.studentName}>{item.student_name || `Student #${item.student_id}`}</Text>
@@ -281,8 +463,13 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
               <View style={styles.markCardRight}>
                 {/* Absent Button */}
                 <TouchableOpacity
-                  style={[styles.absentToggle, item.is_absent && styles.absentToggleActive]}
-                  onPress={() => handleToggleAbsent(item.student_id)}
+                  style={[
+                    styles.absentToggle,
+                    item.is_absent && styles.absentToggleActive,
+                    !isAssigned && styles.btnDisabled,
+                  ]}
+                  onPress={() => isAssigned && handleToggleAbsent(item.student_id)}
+                  disabled={!isAssigned}
                 >
                   <Text style={[styles.absentToggleText, item.is_absent && styles.absentToggleTextActive]}>
                     AB
@@ -292,14 +479,17 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
                 {/* Score Input */}
                 <View style={styles.scoreInputWrapper}>
                   <TextInput
-                    style={[styles.scoreInput, item.is_absent && styles.scoreInputDisabled]}
+                    style={[
+                      styles.scoreInput,
+                      (item.is_absent || !isAssigned) && styles.scoreInputDisabled,
+                    ]}
                     value={item.is_absent ? '-' : String(item.scored_marks || 0)}
                     onChangeText={(t) => handleScoreChange(item.student_id, t)}
                     keyboardType="numeric"
-                    editable={!item.is_absent}
+                    editable={!item.is_absent && isAssigned}
                     maxLength={3}
                   />
-                  <Text style={styles.scoreMax}>/{selectedExam?.max_marks || 100}</Text>
+                  <Text style={styles.scoreMax}>/{selectedSubject?.max_marks || 100}</Text>
                 </View>
 
                 {/* Grade Badge */}
@@ -315,9 +505,9 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
       {/* Bottom Action Bar */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
-          style={[styles.saveBtn, isSaving && styles.btnDisabled]}
+          style={[styles.saveBtn, (!isAssigned || isSaving) && styles.btnDisabled]}
           onPress={handleSaveMarks}
-          disabled={isSaving}
+          disabled={!isAssigned || isSaving}
           activeOpacity={0.8}
         >
           <Ionicons name="save-outline" size={18} color={colors.white} style={{ marginRight: 6 }} />
@@ -325,9 +515,9 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.publishBtn, isSaving && styles.btnDisabled]}
+          style={[styles.publishBtn, (!isAssigned || isSaving) && styles.btnDisabled]}
           onPress={handlePublishMarks}
-          disabled={isSaving}
+          disabled={!isAssigned || isSaving}
           activeOpacity={0.8}
         >
           <Ionicons name="checkmark-done" size={18} color={colors.white} style={{ marginRight: 6 }} />
@@ -335,7 +525,7 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
         </TouchableOpacity>
       </View>
 
-      {/* Exam Selection Modal */}
+      {/* Exam Selection Modal (Each unique exam listed once) */}
       <Modal
         visible={examModalVisible}
         transparent
@@ -350,30 +540,39 @@ export const TeacherResultsScreen: React.FC<{ navigation: any }> = ({ navigation
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Examination</Text>
             <FlatList
-              data={exams}
-              keyExtractor={(item) => String(item.exam_id)}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.modalExamItem,
-                    selectedExam?.exam_id === item.exam_id && styles.modalExamItemSelected,
-                  ]}
-                  onPress={() => {
-                    setSelectedExam(item);
-                    setExamModalVisible(false);
-                  }}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.modalExamName}>{item.exam_name}</Text>
-                    <Text style={styles.modalExamSub}>
-                      Subject: {item.subject_name} • Max: {item.max_marks} • Set: {item.set_name || item.section}
-                    </Text>
-                  </View>
-                  {selectedExam?.exam_id === item.exam_id && (
-                    <Ionicons name="checkmark-circle" size={20} color={colors.accent} />
-                  )}
-                </TouchableOpacity>
-              )}
+              data={groupedExams}
+              keyExtractor={(item) => item.key}
+              renderItem={({ item }) => {
+                const isSelected = selectedExam?.key === item.key;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.modalExamItem,
+                      isSelected && styles.modalExamItemSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedExam(item);
+                      if (item.subjects.length > 0) {
+                        const assigned = item.subjects.find((s) => s.is_assigned_to_teacher !== false) || item.subjects[0];
+                        setSelectedSubject(assigned);
+                      } else {
+                        setSelectedSubject(null);
+                      }
+                      setExamModalVisible(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalExamName}>{item.exam_name}</Text>
+                      <Text style={styles.modalExamSub}>
+                        Class: {item.set_name} • {item.subjects.length} Subjects Configured
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
             />
           </View>
         </TouchableOpacity>
@@ -407,41 +606,42 @@ const styles = StyleSheet.create({
   },
   selectorLabel: {
     fontSize: 12,
+    fontWeight: '700',
     color: colors.textSecondary,
-    fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 6,
+    textTransform: 'uppercase',
   },
   dropdownBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.background,
-    borderWidth: 1.5,
-    borderColor: colors.border,
+    backgroundColor: '#F1F5F9',
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
   },
   dropdownText: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.dark,
+    color: '#0F172A',
     flex: 1,
+    marginRight: 6,
   },
   examMetaBar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 10,
-    paddingTop: 8,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
+    borderTopColor: '#F1F5F9',
   },
   metaBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primaryLighter,
+    backgroundColor: '#EEF2FF',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 6,
   },
   metaBadgeText: {
@@ -449,27 +649,97 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
   },
+  subjectContainer: {
+    marginTop: 10,
+    marginHorizontal: 16,
+  },
+  subjectHeaderLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  subjectScroll: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  subjectChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  subjectChipSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  subjectChipRestricted: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+  },
+  subjectChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  subjectChipTextSelected: {
+    color: colors.white,
+  },
+  subjectChipTextRestricted: {
+    color: '#64748B',
+  },
+  lockTag: {
+    fontSize: 10,
+    color: '#DC2626',
+    marginLeft: 4,
+    fontWeight: '700',
+  },
+  restrictedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  restrictedBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#991B1B',
+    flex: 1,
+  },
   searchRow: {
     marginHorizontal: 16,
-    marginTop: 10,
+    marginTop: 8,
+    marginBottom: 4,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 12,
-    height: 42,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    color: colors.dark,
+    fontSize: 13,
+    color: colors.text,
+    padding: 0,
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
     paddingBottom: 90,
   },
   studentMarkCard: {
@@ -477,12 +747,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.card,
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 12,
-    marginBottom: 10,
+    marginBottom: 8,
+    elevation: 1,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    elevation: 1,
   },
   markCardLeft: {
     flexDirection: 'row',
@@ -492,8 +762,8 @@ const styles = StyleSheet.create({
   rollBadge: {
     width: 32,
     height: 32,
-    borderRadius: 8,
-    backgroundColor: colors.primaryLighter,
+    borderRadius: 16,
+    backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -507,14 +777,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   studentName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    color: colors.dark,
+    color: colors.text,
   },
   studentIdText: {
     fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 1,
+    color: colors.textMuted,
+    marginTop: 2,
   },
   markCardRight: {
     flexDirection: 'row',
@@ -522,21 +792,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   absentToggle: {
-    paddingHorizontal: 6,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
   },
   absentToggleActive: {
-    backgroundColor: colors.error,
-    borderColor: colors.error,
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
   },
   absentToggleText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: colors.neutral,
+    fontWeight: '800',
+    color: '#64748B',
   },
   absentToggleTextActive: {
     color: colors.white,
@@ -544,54 +814,54 @@ const styles = StyleSheet.create({
   scoreInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
-    borderWidth: 1.5,
-    borderColor: colors.border,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
     borderRadius: 8,
-    paddingHorizontal: 6,
-    height: 36,
+    paddingHorizontal: 8,
   },
   scoreInput: {
     width: 36,
+    height: 34,
+    textAlign: 'center',
     fontSize: 14,
     fontWeight: '700',
-    color: colors.dark,
-    textAlign: 'center',
+    color: colors.text,
     padding: 0,
   },
   scoreInputDisabled: {
-    color: colors.textMuted,
+    color: '#94A3B8',
   },
   scoreMax: {
     fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '500',
+    color: colors.textMuted,
+    fontWeight: '600',
   },
   gradeBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.primaryLighter,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#ECFDF5',
     alignItems: 'center',
     justifyContent: 'center',
   },
   gradeBadgeText: {
     fontSize: 12,
     fontWeight: '800',
-    color: colors.primary,
+    color: '#059669',
   },
   bottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: colors.card,
     flexDirection: 'row',
+    backgroundColor: colors.card,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    gap: 12,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
-    gap: 12,
     elevation: 8,
   },
   saveBtn: {
@@ -599,100 +869,95 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.secondary,
-    height: 48,
+    backgroundColor: '#475569',
     borderRadius: 12,
+    paddingVertical: 12,
   },
   publishBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
-    height: 48,
+    backgroundColor: '#0D9488',
     borderRadius: 12,
+    paddingVertical: 12,
   },
   btnText: {
-    fontSize: 14,
-    fontWeight: '700',
     color: colors.white,
+    fontSize: 13,
+    fontWeight: '700',
   },
   btnDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   loadingCenter: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 30,
   },
   loadingText: {
+    marginTop: 10,
     fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 8,
+    color: colors.textMuted,
   },
   emptyCenter: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: 30,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.dark,
-    marginTop: 10,
+    color: colors.text,
+    marginTop: 12,
   },
   emptySubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
+    fontSize: 12,
+    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 18,
+    marginTop: 6,
+    paddingHorizontal: 20,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(10, 15, 29, 0.65)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
-    alignItems: 'center',
     padding: 20,
   },
   modalContent: {
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    padding: 20,
-    width: '100%',
-    maxWidth: 380,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
     maxHeight: '75%',
-    elevation: 8,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.dark,
-    marginBottom: 14,
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: 12,
   },
   modalExamItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
   modalExamItemSelected: {
-    backgroundColor: colors.primaryLighter,
-    borderColor: colors.accent,
+    backgroundColor: '#EEF2FF',
   },
   modalExamName: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.dark,
+    color: colors.text,
   },
   modalExamSub: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 2,
   },
 });

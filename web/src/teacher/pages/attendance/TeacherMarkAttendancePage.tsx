@@ -56,6 +56,7 @@ export const TeacherMarkAttendancePage: React.FC = () => {
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedSectionId, setSelectedSectionId] = useState<string>('0');
   const [selectedDate, setSelectedDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
+  const [sessionFilter, setSessionFilter] = useState<'ALL' | 'MORNING' | 'AFTERNOON'>('ALL');
 
   const [students, setStudents] = useState<StudentAttendanceItem[]>([]);
   const [isHoliday, setIsHoliday] = useState(false);
@@ -250,18 +251,18 @@ export const TeacherMarkAttendancePage: React.FC = () => {
     }
 
     const exceptions = students
-      .filter(
-        (s) =>
-          (s.morning_status && s.morning_status !== 'PRESENT') ||
-          (s.afternoon_status && s.afternoon_status !== 'PRESENT')
-      )
+      .filter((s) => {
+        if (sessionFilter === 'MORNING') return s.morning_status === 'ABSENT';
+        if (sessionFilter === 'AFTERNOON') return s.afternoon_status === 'ABSENT';
+        return s.morning_status === 'ABSENT' || s.afternoon_status === 'ABSENT';
+      })
       .map((s) => ({
         student_id: s.student_id,
         morning_status: s.morning_status || 'PRESENT',
         afternoon_status: s.afternoon_status || 'PRESENT',
         morning_remarks: s.morning_remarks,
         afternoon_remarks: s.afternoon_remarks,
-        status_code: (s.morning_status !== 'PRESENT' ? s.morning_status : s.afternoon_status) as 'ABSENT' | 'LEAVE',
+        status_code: 'ABSENT' as const,
         remarks: [s.morning_remarks, s.afternoon_remarks].filter(Boolean).join('; ') || s.remarks,
       }));
 
@@ -275,6 +276,7 @@ export const TeacherMarkAttendancePage: React.FC = () => {
       class_id: selectedClassId,
       section_id: selectedSectionId !== '0' ? selectedSectionId : '0',
       attendance_date: selectedDate,
+      session: sessionFilter === 'MORNING' ? 'MORNING' : sessionFilter === 'AFTERNOON' ? 'AFTERNOON' : 'BOTH',
       teacher_id: resolvedTeacherId,
       status: statusMode,
       remarks,
@@ -287,7 +289,7 @@ export const TeacherMarkAttendancePage: React.FC = () => {
       const res = await attendanceApi.saveAttendance(payload);
       if (res.success) {
         toast.success(
-          `Attendance ${statusMode === 'SUBMITTED' ? 'submitted' : 'saved'} successfully! (Morning: ${morningPresentCount}P/${morningAbsentCount}A/${morningLeaveCount}L, Afternoon: ${afternoonPresentCount}P/${afternoonAbsentCount}A/${afternoonLeaveCount}L)`
+          `Attendance recorded! (Morning: ${morningPresentCount}P / ${morningAbsentCount}A, Afternoon: ${afternoonPresentCount}P / ${afternoonAbsentCount}A)`
         );
         loadRoster();
       } else {
@@ -302,11 +304,9 @@ export const TeacherMarkAttendancePage: React.FC = () => {
 
   const morningPresentCount = students.filter((s) => (s.morning_status || 'PRESENT') === 'PRESENT').length;
   const morningAbsentCount = students.filter((s) => s.morning_status === 'ABSENT').length;
-  const morningLeaveCount = students.filter((s) => s.morning_status === 'LEAVE').length;
 
   const afternoonPresentCount = students.filter((s) => (s.afternoon_status || 'PRESENT') === 'PRESENT').length;
   const afternoonAbsentCount = students.filter((s) => s.afternoon_status === 'ABSENT').length;
-  const afternoonLeaveCount = students.filter((s) => s.afternoon_status === 'LEAVE').length;
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
@@ -415,7 +415,27 @@ export const TeacherMarkAttendancePage: React.FC = () => {
       <AppCard
         title={`Class Roster (${students.length} Students)`}
         headerAction={
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+            <ButtonGroup size="small" variant="outlined">
+              <Button
+                variant={sessionFilter === 'ALL' ? 'contained' : 'outlined'}
+                onClick={() => setSessionFilter('ALL')}
+              >
+                All Sessions
+              </Button>
+              <Button
+                variant={sessionFilter === 'MORNING' ? 'contained' : 'outlined'}
+                onClick={() => setSessionFilter('MORNING')}
+              >
+                Morning
+              </Button>
+              <Button
+                variant={sessionFilter === 'AFTERNOON' ? 'contained' : 'outlined'}
+                onClick={() => setSessionFilter('AFTERNOON')}
+              >
+                Afternoon
+              </Button>
+            </ButtonGroup>
             <Button
               size="small"
               variant="outlined"
@@ -439,26 +459,28 @@ export const TeacherMarkAttendancePage: React.FC = () => {
       >
         {/* Session Counters */}
         <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ p: 1.5, bgcolor: '#F0FDF4', borderRadius: 2, border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: '#166534', mr: 1 }}>
-                🌅 Morning Session:
-              </Typography>
-              <Chip label={`Present: ${morningPresentCount}`} color="success" size="small" sx={{ fontWeight: 700 }} />
-              <Chip label={`Absent: ${morningAbsentCount}`} color="error" size="small" sx={{ fontWeight: 700 }} />
-              <Chip label={`Leave: ${morningLeaveCount}`} color="warning" size="small" sx={{ fontWeight: 700 }} />
-            </Box>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ p: 1.5, bgcolor: '#EFF6FF', borderRadius: 2, border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E40AF', mr: 1 }}>
-                ☀️ Afternoon Session:
-              </Typography>
-              <Chip label={`Present: ${afternoonPresentCount}`} color="success" size="small" sx={{ fontWeight: 700 }} />
-              <Chip label={`Absent: ${afternoonAbsentCount}`} color="error" size="small" sx={{ fontWeight: 700 }} />
-              <Chip label={`Leave: ${afternoonLeaveCount}`} color="warning" size="small" sx={{ fontWeight: 700 }} />
-            </Box>
-          </Grid>
+          {(sessionFilter === 'ALL' || sessionFilter === 'MORNING') && (
+            <Grid item xs={12} md={sessionFilter === 'ALL' ? 6 : 12}>
+              <Box sx={{ p: 1.5, bgcolor: '#F0FDF4', borderRadius: 2, border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: '#166534', mr: 1 }}>
+                  🌅 Morning Session:
+                </Typography>
+                <Chip label={`Present: ${morningPresentCount}`} color="success" size="small" sx={{ fontWeight: 700 }} />
+                <Chip label={`Absent: ${morningAbsentCount}`} color="error" size="small" sx={{ fontWeight: 700 }} />
+              </Box>
+            </Grid>
+          )}
+          {(sessionFilter === 'ALL' || sessionFilter === 'AFTERNOON') && (
+            <Grid item xs={12} md={sessionFilter === 'ALL' ? 6 : 12}>
+              <Box sx={{ p: 1.5, bgcolor: '#EFF6FF', borderRadius: 2, border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E40AF', mr: 1 }}>
+                  ☀️ Afternoon Session:
+                </Typography>
+                <Chip label={`Present: ${afternoonPresentCount}`} color="success" size="small" sx={{ fontWeight: 700 }} />
+                <Chip label={`Absent: ${afternoonAbsentCount}`} color="error" size="small" sx={{ fontWeight: 700 }} />
+              </Box>
+            </Grid>
+          )}
         </Grid>
 
         {loading && <LinearProgress sx={{ mb: 2 }} />}
@@ -474,28 +496,26 @@ export const TeacherMarkAttendancePage: React.FC = () => {
                 <TableRow>
                   <TableCell sx={{ fontWeight: 700, width: '60px' }}>Roll</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Student Name</TableCell>
-                  <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>🌅 Morning Attendance</TableCell>
-                  <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>☀️ Afternoon Attendance</TableCell>
+                  {(sessionFilter === 'ALL' || sessionFilter === 'MORNING') && (
+                    <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>🌅 Morning Attendance</TableCell>
+                  )}
+                  {(sessionFilter === 'ALL' || sessionFilter === 'AFTERNOON') && (
+                    <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>☀️ Afternoon Attendance</TableCell>
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {students.map((student) => {
-                  const isAnyAbsentOrLeave =
-                    student.morning_status === 'ABSENT' ||
-                    student.morning_status === 'LEAVE' ||
-                    student.afternoon_status === 'ABSENT' ||
-                    student.afternoon_status === 'LEAVE';
+                  const isAbsent =
+                    (sessionFilter === 'MORNING' && student.morning_status === 'ABSENT') ||
+                    (sessionFilter === 'AFTERNOON' && student.afternoon_status === 'ABSENT') ||
+                    (sessionFilter === 'ALL' && (student.morning_status === 'ABSENT' || student.afternoon_status === 'ABSENT'));
 
                   return (
                     <TableRow
                       key={student.student_id}
                       sx={{
-                        bgcolor:
-                          student.morning_status === 'ABSENT' || student.afternoon_status === 'ABSENT'
-                            ? '#FEF2F2'
-                            : isAnyAbsentOrLeave
-                            ? '#FFFBEB'
-                            : 'inherit',
+                        bgcolor: isAbsent ? '#FEF2F2' : 'inherit',
                       }}
                     >
                       <TableCell sx={{ fontWeight: 600 }}>{student.roll_number || '—'}</TableCell>
@@ -519,92 +539,78 @@ export const TeacherMarkAttendancePage: React.FC = () => {
                       </TableCell>
 
                       {/* Morning Session Controls */}
-                      <TableCell sx={{ textAlign: 'center', py: 1 }}>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-                          <ButtonGroup size="small" disabled={isHoliday}>
-                            <Button
-                              variant={(student.morning_status || 'PRESENT') === 'PRESENT' ? 'contained' : 'outlined'}
-                              color="success"
-                              onClick={() => handleMorningStatusChange(student.student_id, 'PRESENT')}
-                              startIcon={<CheckCircleIcon fontSize="small" />}
-                              sx={{ py: 0.25, px: 1, fontSize: '0.75rem' }}
-                            >
-                              Present
-                            </Button>
-                            <Button
-                              variant={student.morning_status === 'ABSENT' ? 'contained' : 'outlined'}
-                              color="error"
-                              onClick={() => handleMorningStatusChange(student.student_id, 'ABSENT')}
-                              startIcon={<CancelIcon fontSize="small" />}
-                              sx={{ py: 0.25, px: 1, fontSize: '0.75rem' }}
-                            >
-                              Absent
-                            </Button>
-                            <Button
-                              variant={student.morning_status === 'LEAVE' ? 'contained' : 'outlined'}
-                              color="warning"
-                              onClick={() => handleMorningStatusChange(student.student_id, 'LEAVE')}
-                              startIcon={<EventBusyIcon fontSize="small" />}
-                              sx={{ py: 0.25, px: 1, fontSize: '0.75rem' }}
-                            >
-                              Leave
-                            </Button>
-                          </ButtonGroup>
-                          {student.morning_status && student.morning_status !== 'PRESENT' && (
-                            <TextField
-                              size="small"
-                              placeholder="Morning remarks..."
-                              value={student.morning_remarks || ''}
-                              onChange={(e) => handleMorningRemarksChange(student.student_id, e.target.value)}
-                              sx={{ width: '100%', maxWidth: 220, mt: 0.5, '& .MuiInputBase-input': { fontSize: '0.75rem', py: 0.5 } }}
-                            />
-                          )}
-                        </Box>
-                      </TableCell>
+                      {(sessionFilter === 'ALL' || sessionFilter === 'MORNING') && (
+                        <TableCell sx={{ textAlign: 'center', py: 1 }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                            <ButtonGroup size="small" disabled={isHoliday}>
+                              <Button
+                                variant={(student.morning_status || 'PRESENT') === 'PRESENT' ? 'contained' : 'outlined'}
+                                color="success"
+                                onClick={() => handleMorningStatusChange(student.student_id, 'PRESENT')}
+                                startIcon={<CheckCircleIcon fontSize="small" />}
+                                sx={{ py: 0.25, px: 1.5, fontSize: '0.75rem' }}
+                              >
+                                Present
+                              </Button>
+                              <Button
+                                variant={student.morning_status === 'ABSENT' ? 'contained' : 'outlined'}
+                                color="error"
+                                onClick={() => handleMorningStatusChange(student.student_id, 'ABSENT')}
+                                startIcon={<CancelIcon fontSize="small" />}
+                                sx={{ py: 0.25, px: 1.5, fontSize: '0.75rem' }}
+                              >
+                                Absent
+                              </Button>
+                            </ButtonGroup>
+                            {student.morning_status === 'ABSENT' && (
+                              <TextField
+                                size="small"
+                                placeholder="Morning remarks..."
+                                value={student.morning_remarks || ''}
+                                onChange={(e) => handleMorningRemarksChange(student.student_id, e.target.value)}
+                                sx={{ width: '100%', maxWidth: 220, mt: 0.5, '& .MuiInputBase-input': { fontSize: '0.75rem', py: 0.5 } }}
+                              />
+                            )}
+                          </Box>
+                        </TableCell>
+                      )}
 
                       {/* Afternoon Session Controls */}
-                      <TableCell sx={{ textAlign: 'center', py: 1 }}>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-                          <ButtonGroup size="small" disabled={isHoliday}>
-                            <Button
-                              variant={(student.afternoon_status || 'PRESENT') === 'PRESENT' ? 'contained' : 'outlined'}
-                              color="success"
-                              onClick={() => handleAfternoonStatusChange(student.student_id, 'PRESENT')}
-                              startIcon={<CheckCircleIcon fontSize="small" />}
-                              sx={{ py: 0.25, px: 1, fontSize: '0.75rem' }}
-                            >
-                              Present
-                            </Button>
-                            <Button
-                              variant={student.afternoon_status === 'ABSENT' ? 'contained' : 'outlined'}
-                              color="error"
-                              onClick={() => handleAfternoonStatusChange(student.student_id, 'ABSENT')}
-                              startIcon={<CancelIcon fontSize="small" />}
-                              sx={{ py: 0.25, px: 1, fontSize: '0.75rem' }}
-                            >
-                              Absent
-                            </Button>
-                            <Button
-                              variant={student.afternoon_status === 'LEAVE' ? 'contained' : 'outlined'}
-                              color="warning"
-                              onClick={() => handleAfternoonStatusChange(student.student_id, 'LEAVE')}
-                              startIcon={<EventBusyIcon fontSize="small" />}
-                              sx={{ py: 0.25, px: 1, fontSize: '0.75rem' }}
-                            >
-                              Leave
-                            </Button>
-                          </ButtonGroup>
-                          {student.afternoon_status && student.afternoon_status !== 'PRESENT' && (
-                            <TextField
-                              size="small"
-                              placeholder="Afternoon remarks..."
-                              value={student.afternoon_remarks || ''}
-                              onChange={(e) => handleAfternoonRemarksChange(student.student_id, e.target.value)}
-                              sx={{ width: '100%', maxWidth: 220, mt: 0.5, '& .MuiInputBase-input': { fontSize: '0.75rem', py: 0.5 } }}
-                            />
-                          )}
-                        </Box>
-                      </TableCell>
+                      {(sessionFilter === 'ALL' || sessionFilter === 'AFTERNOON') && (
+                        <TableCell sx={{ textAlign: 'center', py: 1 }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                            <ButtonGroup size="small" disabled={isHoliday}>
+                              <Button
+                                variant={(student.afternoon_status || 'PRESENT') === 'PRESENT' ? 'contained' : 'outlined'}
+                                color="success"
+                                onClick={() => handleAfternoonStatusChange(student.student_id, 'PRESENT')}
+                                startIcon={<CheckCircleIcon fontSize="small" />}
+                                sx={{ py: 0.25, px: 1.5, fontSize: '0.75rem' }}
+                              >
+                                Present
+                              </Button>
+                              <Button
+                                variant={student.afternoon_status === 'ABSENT' ? 'contained' : 'outlined'}
+                                color="error"
+                                onClick={() => handleAfternoonStatusChange(student.student_id, 'ABSENT')}
+                                startIcon={<CancelIcon fontSize="small" />}
+                                sx={{ py: 0.25, px: 1.5, fontSize: '0.75rem' }}
+                              >
+                                Absent
+                              </Button>
+                            </ButtonGroup>
+                            {student.afternoon_status === 'ABSENT' && (
+                              <TextField
+                                size="small"
+                                placeholder="Afternoon remarks..."
+                                value={student.afternoon_remarks || ''}
+                                onChange={(e) => handleAfternoonRemarksChange(student.student_id, e.target.value)}
+                                sx={{ width: '100%', maxWidth: 220, mt: 0.5, '& .MuiInputBase-input': { fontSize: '0.75rem', py: 0.5 } }}
+                              />
+                            )}
+                          </Box>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}

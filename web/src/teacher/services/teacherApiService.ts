@@ -613,7 +613,7 @@ export const teacherApiService = {
   },
 
   // ── Exams & Marks ──
-  getExams: async (teacherId?: string | number): Promise<ExamScheduleItem[]> => {
+  getExams: async (teacherId?: string | number, academicYearId?: number): Promise<ExamScheduleItem[]> => {
     try {
       const orgId = getOrgId();
       const resolvedTeacherId = Number(
@@ -623,7 +623,12 @@ export const teacherApiService = {
         2
       );
       const res = await apiClient.get<any>('/academic', {
-        params: { action: 'GET_EXAMS', org_id: orgId, teacher_id: resolvedTeacherId },
+        params: {
+          action: 'GET_EXAMS',
+          org_id: orgId,
+          teacher_id: resolvedTeacherId,
+          ...(academicYearId && { academic_year_id: academicYearId }),
+        },
         headers: { org_id: String(orgId) },
       });
       if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
@@ -631,6 +636,10 @@ export const teacherApiService = {
           id: ex.exam_id,
           exam_name: ex.exam_name,
           class_name: ex.class_name || ex.set_name || 'Class 10',
+          section: ex.section,
+          set_name: ex.set_name,
+          academic_set_id: ex.academic_set_id,
+          academic_year_id: ex.academic_year_id,
           subject: ex.subject_name,
           date: ex.exam_date,
           start_time: '09:00 AM',
@@ -638,7 +647,10 @@ export const teacherApiService = {
           max_marks: Number(ex.max_marks) || 100,
           pass_marks: Number(ex.passing_marks) || 35,
           room_no: 'Room 204',
-          is_published: ex.status === 'EVALUATED' || ex.status === 'COMPLETED',
+          is_published: ex.status === 'EVALUATED' || ex.status === 'COMPLETED' || ex.status === 'PUBLISHED',
+          subjects: Array.isArray(ex.subjects) ? ex.subjects : [],
+          evaluated_count: ex.evaluated_count,
+          total_students_count: ex.total_students_count,
         }));
       }
     } catch (e) {
@@ -658,7 +670,7 @@ export const teacherApiService = {
           student_name: st.student_name,
           roll_no: st.roll_number || String(st.student_id),
           marks_obtained: st.scored_marks || 0,
-          max_marks: 100,
+          max_marks: res.data.exam?.max_marks || 100,
           grade: st.grade || 'A',
           remarks: st.remarks || '',
         }));
@@ -675,9 +687,15 @@ export const teacherApiService = {
     ];
   },
 
-
-  saveExamMarks: async (examId: number, marks: StudentExamMark[]): Promise<boolean> => {
+  saveExamMarks: async (examId: number, marks: StudentExamMark[], teacherId?: string | number): Promise<boolean> => {
     try {
+      const orgId = getOrgId();
+      const resolvedTeacherId = Number(
+        teacherId ||
+        sessionStorage.getItem('teacher_id') ||
+        store.getState().auth.user?.id ||
+        2
+      );
       const payload = marks.map((m) => ({
         student_id: m.student_id,
         scored_marks: m.marks_obtained,
@@ -687,13 +705,18 @@ export const teacherApiService = {
       }));
       const res = await apiClient.post<any>('/academic', {
         action: 'SAVE_STUDENT_MARKS',
+        org_id: orgId,
         exam_id: examId,
+        teacher_id: resolvedTeacherId,
         marks: payload,
       });
-      return res.data?.success ?? true;
-    } catch (e) {
+      if (res.data?.success === false) {
+        throw new Error(res.data?.message || 'Failed to save marks');
+      }
+      return true;
+    } catch (e: any) {
       console.warn('Failed to save exam marks to backend', e);
-      return false;
+      throw e;
     }
   },
 

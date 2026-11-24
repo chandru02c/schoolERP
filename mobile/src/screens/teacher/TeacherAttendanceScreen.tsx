@@ -38,10 +38,12 @@ import { useBackToHome } from '../../hooks/useBackToHome';
 const StudentAttendanceRow = React.memo(
   ({
     student,
+    activeSession,
     onStatusChange,
   }: {
     student: StudentAttendanceItem;
-    onStatusChange: (studentId: number | string, status: 'PRESENT' | 'ABSENT' | 'LEAVE' | 'LATE') => void;
+    activeSession: 'MORNING' | 'AFTERNOON';
+    onStatusChange: (studentId: number | string, status: 'PRESENT' | 'ABSENT') => void;
   }) => {
     const studentName =
       student.full_name ||
@@ -50,6 +52,9 @@ const StudentAttendanceRow = React.memo(
       'Student';
 
     const photo = student.avatar || student.student_photo;
+    const currentStatus = activeSession === 'MORNING' 
+      ? (student.morning_status || student.status || 'PRESENT') 
+      : (student.afternoon_status || student.status || 'PRESENT');
 
     return (
       <View style={styles.studentCard}>
@@ -76,45 +81,23 @@ const StudentAttendanceRow = React.memo(
         <View style={styles.statusButtonsGroup}>
           {/* Present */}
           <TouchableOpacity
-            style={[styles.statusBtn, student.status === 'PRESENT' && styles.statusBtnPresentActive]}
+            style={[styles.statusBtn, currentStatus === 'PRESENT' && styles.statusBtnPresentActive]}
             onPress={() => onStatusChange(student.student_id, 'PRESENT')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.statusBtnText, student.status === 'PRESENT' && styles.statusBtnTextActive]}>
+            <Text style={[styles.statusBtnText, currentStatus === 'PRESENT' && styles.statusBtnTextActive]}>
               P
             </Text>
           </TouchableOpacity>
 
           {/* Absent */}
           <TouchableOpacity
-            style={[styles.statusBtn, student.status === 'ABSENT' && styles.statusBtnAbsentActive]}
+            style={[styles.statusBtn, currentStatus === 'ABSENT' && styles.statusBtnAbsentActive]}
             onPress={() => onStatusChange(student.student_id, 'ABSENT')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.statusBtnText, student.status === 'ABSENT' && styles.statusBtnTextActive]}>
+            <Text style={[styles.statusBtnText, currentStatus === 'ABSENT' && styles.statusBtnTextActive]}>
               A
-            </Text>
-          </TouchableOpacity>
-
-          {/* Leave */}
-          <TouchableOpacity
-            style={[styles.statusBtn, student.status === 'LEAVE' && styles.statusBtnLeaveActive]}
-            onPress={() => onStatusChange(student.student_id, 'LEAVE')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.statusBtnText, student.status === 'LEAVE' && styles.statusBtnTextActive]}>
-              L
-            </Text>
-          </TouchableOpacity>
-
-          {/* Late */}
-          <TouchableOpacity
-            style={[styles.statusBtn, student.status === 'LATE' && styles.statusBtnLateActive]}
-            onPress={() => onStatusChange(student.student_id, 'LATE')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.statusBtnText, student.status === 'LATE' && styles.statusBtnTextActive]}>
-              LT
             </Text>
           </TouchableOpacity>
         </View>
@@ -128,6 +111,7 @@ export const TeacherAttendanceScreen: React.FC<{ navigation: any }> = ({ navigat
   const { user } = useAuth();
   const { selectedSet, activeYear, assignedSets, setSelectedSet } = useAcademic();
 
+  const [activeSession, setActiveSession] = useState<'MORNING' | 'AFTERNOON'>('MORNING');
   const [students, setStudents] = useState<StudentAttendanceItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -155,6 +139,8 @@ export const TeacherAttendanceScreen: React.FC<{ navigation: any }> = ({ navigat
 
       const loadedStudents = (sheet.students || []).map((s) => ({
         ...s,
+        morning_status: (s.morning_status === 'ABSENT' ? 'ABSENT' : 'PRESENT') as 'PRESENT' | 'ABSENT',
+        afternoon_status: (s.afternoon_status === 'ABSENT' ? 'ABSENT' : 'PRESENT') as 'PRESENT' | 'ABSENT',
         status: s.status || 'PRESENT',
       }));
 
@@ -171,25 +157,44 @@ export const TeacherAttendanceScreen: React.FC<{ navigation: any }> = ({ navigat
     loadDailySheet();
   }, [loadDailySheet]);
 
-  // Handle single student status change (Present, Absent, Leave, Late)
-  const handleStatusChange = useCallback((studentId: number | string, newStatus: 'PRESENT' | 'ABSENT' | 'LEAVE' | 'LATE') => {
+  // Handle single student status change (Present, Absent only)
+  const handleStatusChange = useCallback((studentId: number | string, newStatus: 'PRESENT' | 'ABSENT') => {
     setStudents((prev) =>
-      prev.map((s) => (s.student_id === studentId ? { ...s, status: newStatus } : s))
+      prev.map((s) => {
+        if (s.student_id === studentId) {
+          return activeSession === 'MORNING'
+            ? { ...s, morning_status: newStatus }
+            : { ...s, afternoon_status: newStatus };
+        }
+        return s;
+      })
     );
     setIsSaved(false);
-  }, []);
+  }, [activeSession]);
 
-  // Bulk Attendance: Mark All Present
+  // Bulk Attendance: Mark All Present for active session
   const handleBulkPresent = useCallback(() => {
-    setStudents((prev) => prev.map((s) => ({ ...s, status: 'PRESENT' })));
+    setStudents((prev) =>
+      prev.map((s) =>
+        activeSession === 'MORNING'
+          ? { ...s, morning_status: 'PRESENT' }
+          : { ...s, afternoon_status: 'PRESENT' }
+      )
+    );
     setIsSaved(false);
-  }, []);
+  }, [activeSession]);
 
-  // Bulk Attendance: Mark All Absent
+  // Bulk Attendance: Mark All Absent for active session
   const handleBulkAbsent = useCallback(() => {
-    setStudents((prev) => prev.map((s) => ({ ...s, status: 'ABSENT' })));
+    setStudents((prev) =>
+      prev.map((s) =>
+        activeSession === 'MORNING'
+          ? { ...s, morning_status: 'ABSENT' }
+          : { ...s, afternoon_status: 'ABSENT' }
+      )
+    );
     setIsSaved(false);
-  }, []);
+  }, [activeSession]);
 
   // Save Attendance to Backend
   const handleSaveAttendance = useCallback(async () => {
@@ -198,11 +203,13 @@ export const TeacherAttendanceScreen: React.FC<{ navigation: any }> = ({ navigat
     setIsSubmitting(true);
     try {
       const exceptions = students
-        .filter((s) => s.status === 'ABSENT' || s.status === 'LEAVE' || s.status === 'LATE')
+        .filter((s) => (activeSession === 'MORNING' ? s.morning_status === 'ABSENT' : s.afternoon_status === 'ABSENT'))
         .map((s) => ({
           student_id: Number(s.student_id),
-          status_code: (s.status === 'LATE' ? 'LEAVE' : s.status) as 'ABSENT' | 'LEAVE',
-          remarks: s.remarks || s.status,
+          morning_status: s.morning_status || 'PRESENT',
+          afternoon_status: s.afternoon_status || 'PRESENT',
+          status_code: 'ABSENT' as const,
+          remarks: s.remarks || 'Absent',
         }));
 
       await attendanceService.saveAttendance({
@@ -212,20 +219,21 @@ export const TeacherAttendanceScreen: React.FC<{ navigation: any }> = ({ navigat
         academic_year_id: activeYear?.academic_year_id || 6,
         teacher_id: teacherId,
         status: 'SUBMITTED',
+        session: activeSession,
         exceptions,
       });
 
       setIsSaved(true);
       Alert.alert(
         'Attendance Recorded',
-        `Daily attendance for ${selectedSet?.class_name || 'Class 5'} - ${selectedSet?.section || 'A'} on ${selectedDate} has been saved successfully.`
+        `${activeSession === 'MORNING' ? 'Morning' : 'Afternoon'} attendance for ${selectedSet?.class_name || 'Class 5'} - ${selectedSet?.section || 'A'} on ${selectedDate} has been saved successfully.`
       );
     } catch (err: any) {
       Alert.alert('Save Failed', err.response?.data?.message || err.message || 'Unable to save attendance.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [students, selectedSet, selectedDate, activeYear?.academic_year_id, teacherId]);
+  }, [students, selectedSet, selectedDate, activeYear?.academic_year_id, teacherId, activeSession]);
 
   // Memoized Search filtering
   const filteredStudents = useMemo(() => {
@@ -239,11 +247,25 @@ export const TeacherAttendanceScreen: React.FC<{ navigation: any }> = ({ navigat
     });
   }, [students, searchQuery]);
 
-  // Metrics counts
-  const presentCount = useMemo(() => students.filter((s) => s.status === 'PRESENT').length, [students]);
-  const absentCount = useMemo(() => students.filter((s) => s.status === 'ABSENT').length, [students]);
-  const leaveCount = useMemo(() => students.filter((s) => s.status === 'LEAVE').length, [students]);
-  const lateCount = useMemo(() => students.filter((s) => s.status === 'LATE').length, [students]);
+  // Metrics counts for the currently active session
+  const presentCount = useMemo(
+    () =>
+      students.filter((s) =>
+        activeSession === 'MORNING'
+          ? (s.morning_status || 'PRESENT') === 'PRESENT'
+          : (s.afternoon_status || 'PRESENT') === 'PRESENT'
+      ).length,
+    [students, activeSession]
+  );
+  const absentCount = useMemo(
+    () =>
+      students.filter((s) =>
+        activeSession === 'MORNING'
+          ? s.morning_status === 'ABSENT'
+          : s.afternoon_status === 'ABSENT'
+      ).length,
+    [students, activeSession]
+  );
 
   return (
     <View style={styles.container}>
@@ -282,6 +304,40 @@ export const TeacherAttendanceScreen: React.FC<{ navigation: any }> = ({ navigat
         </View>
       )}
 
+      {/* Session Switcher (Morning / Afternoon) */}
+      <View style={styles.sessionToggleContainer}>
+        <TouchableOpacity
+          style={[styles.sessionToggleBtn, activeSession === 'MORNING' && styles.sessionToggleBtnActive]}
+          onPress={() => setActiveSession('MORNING')}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="sunny-outline"
+            size={16}
+            color={activeSession === 'MORNING' ? colors.white : colors.primary}
+            style={{ marginRight: 6 }}
+          />
+          <Text style={[styles.sessionToggleText, activeSession === 'MORNING' && styles.sessionToggleTextActive]}>
+            Morning Session
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sessionToggleBtn, activeSession === 'AFTERNOON' && styles.sessionToggleBtnActive]}
+          onPress={() => setActiveSession('AFTERNOON')}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="partly-sunny-outline"
+            size={16}
+            color={activeSession === 'AFTERNOON' ? colors.white : colors.primary}
+            style={{ marginRight: 6 }}
+          />
+          <Text style={[styles.sessionToggleText, activeSession === 'AFTERNOON' && styles.sessionToggleTextActive]}>
+            Afternoon Session
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Summary KPI Bar */}
       <View style={styles.kpiBar}>
         <View style={styles.kpiItem}>
@@ -295,13 +351,8 @@ export const TeacherAttendanceScreen: React.FC<{ navigation: any }> = ({ navigat
         </View>
         <View style={styles.kpiDivider} />
         <View style={styles.kpiItem}>
-          <Text style={[styles.kpiNum, { color: colors.warning }]}>{leaveCount}</Text>
-          <Text style={styles.kpiText}>Leave</Text>
-        </View>
-        <View style={styles.kpiDivider} />
-        <View style={styles.kpiItem}>
-          <Text style={[styles.kpiNum, { color: colors.accent }]}>{lateCount}</Text>
-          <Text style={styles.kpiText}>Late</Text>
+          <Text style={[styles.kpiNum, { color: colors.primary }]}>{students.length}</Text>
+          <Text style={styles.kpiText}>Total</Text>
         </View>
       </View>
 
@@ -359,7 +410,11 @@ export const TeacherAttendanceScreen: React.FC<{ navigation: any }> = ({ navigat
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <StudentAttendanceRow student={item} onStatusChange={handleStatusChange} />
+            <StudentAttendanceRow
+              student={item}
+              activeSession={activeSession}
+              onStatusChange={handleStatusChange}
+            />
           )}
         />
       )}
@@ -434,6 +489,37 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   chipTextActive: {
+    color: colors.white,
+  },
+  sessionToggleContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 10,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    gap: 6,
+  },
+  sessionToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'transparent',
+  },
+  sessionToggleBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  sessionToggleText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  sessionToggleTextActive: {
     color: colors.white,
   },
   kpiBar: {

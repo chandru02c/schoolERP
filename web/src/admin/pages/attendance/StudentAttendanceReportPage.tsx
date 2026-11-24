@@ -155,18 +155,14 @@ export const StudentAttendanceReportPage: React.FC = () => {
       'Working Days',
       'Present Days',
       'Total Absent Days',
-      'Total Leave Days',
       'Morning Absent',
-      'Morning Leave',
       'Afternoon Absent',
-      'Afternoon Leave',
       'Attendance %',
     ];
     const rows = students.map((s) => {
       const working = s.total_working_days || 0;
       const absent = s.absent_days || 0;
-      const leave = s.leave_days || 0;
-      const present = Math.max(0, working - absent - leave);
+      const present = Math.max(0, working - absent);
       const pct = working > 0 ? Math.round((present / working) * 100) : 0;
       return [
         s.roll_number,
@@ -177,11 +173,8 @@ export const StudentAttendanceReportPage: React.FC = () => {
         working,
         present,
         absent,
-        leave,
         s.morning_absent_days ?? absent,
-        s.morning_leave_days ?? leave,
         s.afternoon_absent_days ?? absent,
-        s.afternoon_leave_days ?? leave,
         `${pct}%`,
       ];
     });
@@ -237,22 +230,20 @@ export const StudentAttendanceReportPage: React.FC = () => {
       minWidth: 100,
       align: 'center',
       render: (row: StudentAttendanceReportItem) => {
-        const present = Math.max(0, row.total_working_days - row.absent_days - row.leave_days);
+        const present = Math.max(0, row.total_working_days - row.absent_days);
         return <Chip label={present} size="small" color="success" sx={{ fontWeight: 700 }} />;
       },
     },
     {
       id: 'morning_session',
       label: '🌅 Morning',
-      minWidth: 130,
+      minWidth: 110,
       align: 'center',
       render: (row: StudentAttendanceReportItem) => {
         const mAbsent = row.morning_absent_days ?? row.absent_days;
-        const mLeave = row.morning_leave_days ?? row.leave_days;
         return (
           <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-            <Chip label={`${mAbsent} Abs`} size="small" color={mAbsent > 0 ? 'error' : 'default'} sx={{ height: 20, fontSize: '0.7rem' }} />
-            <Chip label={`${mLeave} Lve`} size="small" color={mLeave > 0 ? 'warning' : 'default'} sx={{ height: 20, fontSize: '0.7rem' }} />
+            <Chip label={`${mAbsent} Absent`} size="small" color={mAbsent > 0 ? 'error' : 'default'} sx={{ height: 20, fontSize: '0.7rem' }} />
           </Box>
         );
       },
@@ -260,15 +251,13 @@ export const StudentAttendanceReportPage: React.FC = () => {
     {
       id: 'afternoon_session',
       label: '☀️ Afternoon',
-      minWidth: 130,
+      minWidth: 110,
       align: 'center',
       render: (row: StudentAttendanceReportItem) => {
         const aAbsent = row.afternoon_absent_days ?? row.absent_days;
-        const aLeave = row.afternoon_leave_days ?? row.leave_days;
         return (
           <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-            <Chip label={`${aAbsent} Abs`} size="small" color={aAbsent > 0 ? 'error' : 'default'} sx={{ height: 20, fontSize: '0.7rem' }} />
-            <Chip label={`${aLeave} Lve`} size="small" color={aLeave > 0 ? 'warning' : 'default'} sx={{ height: 20, fontSize: '0.7rem' }} />
+            <Chip label={`${aAbsent} Absent`} size="small" color={aAbsent > 0 ? 'error' : 'default'} sx={{ height: 20, fontSize: '0.7rem' }} />
           </Box>
         );
       },
