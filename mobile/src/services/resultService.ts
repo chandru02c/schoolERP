@@ -12,6 +12,20 @@ import api from './api';
 import storage from '../storage';
 import { APP_CONFIG } from '../constants';
 
+export interface ExamSubjectItem {
+  exam_id: number;
+  subject_name: string;
+  teacher_id?: number;
+  teacher_name?: string;
+  max_marks: number;
+  passing_marks: number;
+  exam_date?: string;
+  status?: string;
+  evaluated_count?: number;
+  total_students_count?: number;
+  is_assigned_to_teacher?: boolean;
+}
+
 export interface ExamItem {
   exam_id: number;
   exam_name: string;
@@ -26,9 +40,12 @@ export interface ExamItem {
   class_name?: string;
   section?: string;
   set_name?: string;
+  teacher_id?: number;
   teacher_name?: string;
   evaluated_count?: number;
   total_students_count?: number;
+  is_assigned_to_teacher?: boolean;
+  subjects?: ExamSubjectItem[];
 }
 
 export interface StudentExamMarkItem {
@@ -104,6 +121,7 @@ export const resultService = {
    */
   async saveStudentMarks(payload: {
     exam_id: number | string;
+    teacher_id?: number | string;
     marks: Array<{
       student_id: number;
       scored_marks: number;
@@ -114,6 +132,7 @@ export const resultService = {
   }): Promise<any> {
     const session = await storage.getUserSession();
     const orgId = session?.org_id || APP_CONFIG.defaultOrgId;
+    const teacherId = payload.teacher_id || session?.teacher_id || session?.id;
 
     const response = await api.post(
       '/academic',
@@ -121,6 +140,7 @@ export const resultService = {
         action: 'SAVE_STUDENT_MARKS',
         org_id: Number(orgId),
         exam_id: Number(payload.exam_id),
+        teacher_id: teacherId ? Number(teacherId) : undefined,
         marks: payload.marks,
       },
       {

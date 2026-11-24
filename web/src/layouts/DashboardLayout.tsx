@@ -59,52 +59,6 @@ interface NavItem {
 const getAdminNavItems = (teacherId: string | number): NavItem[] => [
   { label: 'Dashboard', path: `/admin/${teacherId}/dashboard`, icon: <DashboardIcon /> },
   {
-    label: 'Admission',
-    icon: <HowToRegIcon />,
-    children: [
-      { label: 'Admission Dashboard', path: `/admin/${teacherId}/admission/dashboard`, icon: <DashboardCustomizeIcon /> },
-      { label: 'Admission List', path: `/admin/${teacherId}/admission/list`, icon: <FormatListBulletedIcon /> },
-      { label: 'Create Admission', path: `/admin/${teacherId}/admission/create`, icon: <AddCardIcon /> },
-    ],
-  },
-  {
-    label: 'Student',
-    icon: <SchoolIcon />,
-    children: [
-      { label: 'Student Dashboard', path: `/admin/${teacherId}/student/dashboard`, icon: <DashboardCustomizeIcon /> },
-      { label: 'Student List', path: `/admin/${teacherId}/student/list`, icon: <FormatListBulletedIcon /> },
-      { label: 'Create Student', path: `/admin/${teacherId}/student/create`, icon: <AddCardIcon /> },
-    ],
-  },
-  {
-    label: 'Teacher',
-    icon: <PeopleIcon />,
-    children: [
-      { label: 'Teacher Dashboard', path: `/admin/${teacherId}/teacher/dashboard`, icon: <DashboardCustomizeIcon /> },
-      { label: 'Teacher List', path: `/admin/${teacherId}/teacher/list`, icon: <FormatListBulletedIcon /> },
-      { label: 'Create Teacher', path: `/admin/${teacherId}/teacher/create`, icon: <AddCardIcon /> },
-      { label: 'Leave Management', path: `/admin/${teacherId}/teacher/leave`, icon: <EventBusyIcon /> },
-    ],
-  },
-  {
-    label: 'Class',
-    icon: <ClassIcon />,
-    children: [
-      { label: 'Class Dashboard', path: `/admin/${teacherId}/class/dashboard`, icon: <DashboardCustomizeIcon /> },
-      { label: 'Class List', path: `/admin/${teacherId}/class/list`, icon: <FormatListBulletedIcon /> },
-      { label: 'Create Class', path: `/admin/${teacherId}/class/create`, icon: <AddCardIcon /> },
-    ],
-  },
-  {
-    label: 'Event',
-    icon: <EventIcon />,
-    children: [
-      { label: 'Event Dashboard', path: `/admin/${teacherId}/event/dashboard`, icon: <DashboardCustomizeIcon /> },
-      { label: 'Event List', path: `/admin/${teacherId}/event/list`, icon: <FormatListBulletedIcon /> },
-      { label: 'Create Event', path: `/admin/${teacherId}/event/create`, icon: <AddCardIcon /> },
-    ],
-  },
-  {
     label: 'Academic Management',
     icon: <SchoolIcon />,
     children: [
@@ -118,14 +72,53 @@ const getAdminNavItems = (teacherId: string | number): NavItem[] => [
     ],
   },
   {
+    label: 'Admission',
+    icon: <HowToRegIcon />,
+    children: [
+      { label: 'Admission Dashboard', path: `/admin/${teacherId}/admission/dashboard`, icon: <DashboardCustomizeIcon /> },
+      { label: 'Admission List', path: `/admin/${teacherId}/admission/list`, icon: <FormatListBulletedIcon /> },
+    ],
+  },
+  {
+    label: 'Student',
+    icon: <SchoolIcon />,
+    children: [
+      { label: 'Student Dashboard', path: `/admin/${teacherId}/student/dashboard`, icon: <DashboardCustomizeIcon /> },
+      { label: 'Student List', path: `/admin/${teacherId}/student/list`, icon: <FormatListBulletedIcon /> },
+    ],
+  },
+  {
+    label: 'Teacher',
+    icon: <PeopleIcon />,
+    children: [
+      { label: 'Teacher Dashboard', path: `/admin/${teacherId}/teacher/dashboard`, icon: <DashboardCustomizeIcon /> },
+      { label: 'Teacher List', path: `/admin/${teacherId}/teacher/list`, icon: <FormatListBulletedIcon /> },
+      { label: 'Leave Management', path: `/admin/${teacherId}/teacher/leave`, icon: <EventBusyIcon /> },
+    ],
+  },
+  {
+    label: 'Class',
+    icon: <ClassIcon />,
+    children: [
+      { label: 'Class Dashboard', path: `/admin/${teacherId}/class/dashboard`, icon: <DashboardCustomizeIcon /> },
+      { label: 'Class List', path: `/admin/${teacherId}/class/list`, icon: <FormatListBulletedIcon /> },
+    ],
+  },
+  {
+    label: 'Event',
+    icon: <EventIcon />,
+    children: [
+      { label: 'Event Dashboard', path: `/admin/${teacherId}/event/dashboard`, icon: <DashboardCustomizeIcon /> },
+      { label: 'Event List', path: `/admin/${teacherId}/event/list`, icon: <FormatListBulletedIcon /> },
+    ],
+  },
+  {
     label: 'Attendance',
     icon: <CheckCircleIcon />,
     children: [
       { label: 'Attendance Dashboard', path: `/admin/${teacherId}/attendance/dashboard`, icon: <DashboardCustomizeIcon /> },
       { label: 'Holiday Management', path: `/admin/${teacherId}/attendance/holidays`, icon: <EventIcon /> },
       { label: 'Take Attendance', path: `/admin/${teacherId}/attendance/take`, icon: <AddCardIcon /> },
-      { label: 'Attendance History', path: `/admin/${teacherId}/attendance/history`, icon: <FormatListBulletedIcon /> },
-      { label: 'Class Attendance Report', path: `/admin/${teacherId}/attendance/class-report`, icon: <BarChartIcon /> },
       { label: 'Student Attendance Report', path: `/admin/${teacherId}/attendance/student-report`, icon: <PeopleIcon /> },
       { label: 'Attendance Summary', path: `/admin/${teacherId}/attendance/summary`, icon: <AssignmentTurnedInIcon /> },
       { label: 'Attendance Analytics', path: `/admin/${teacherId}/attendance/analytics`, icon: <BarChartIcon /> },
@@ -202,7 +195,8 @@ const DashboardLayout: React.FC = () => {
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
 
   const toggleMenu = (label: string) => {
-    setExpandedMenus((prev) => ({ ...prev, [label]: !prev[label] }));
+    // Accordion: Only one menu can remain expanded at a time
+    setExpandedMenus((prev) => (prev[label] ? {} : { [label]: true }));
   };
 
   const renderNavItem = (item: NavItem, depth = 0) => {

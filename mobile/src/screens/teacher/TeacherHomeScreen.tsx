@@ -165,14 +165,6 @@ export const TeacherHomeScreen = ({ navigation }: any) => {
         color: '#2E67D1',
       },
       {
-        id: 'assignments',
-        title: 'Assignments',
-        icon: 'book-outline' as const,
-        route: 'TeacherAssignments',
-        count: '2 Active',
-        color: '#7C3AED',
-      },
-      {
         id: 'notifications',
         title: 'Notifications',
         icon: 'notifications-outline' as const,

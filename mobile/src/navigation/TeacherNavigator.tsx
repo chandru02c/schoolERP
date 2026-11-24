@@ -20,7 +20,6 @@ import TeacherProfileScreen from '../screens/teacher/TeacherProfileScreen';
 import TeacherAttendanceScreen from '../screens/teacher/TeacherAttendanceScreen';
 import TeacherStudentListScreen from '../screens/teacher/TeacherStudentListScreen';
 import StudentDetailScreen from '../screens/teacher/StudentDetailScreen';
-import TeacherAssignmentScreen from '../screens/teacher/TeacherAssignmentScreen';
 import TeacherResultsScreen from '../screens/teacher/TeacherResultsScreen';
 import TeacherNotificationScreen from '../screens/teacher/TeacherNotificationScreen';
 import TeacherEventsScreen from '../screens/teacher/TeacherEventsScreen';
@@ -113,7 +112,6 @@ export const TeacherNavigator: React.FC = () => {
       <Stack.Screen name="TeacherStudents" component={TeacherStudentListScreen} />
       <Stack.Screen name="StudentDetail" component={StudentDetailScreen} />
       <Stack.Screen name="TeacherTimetable" component={TeacherTimetableScreen} />
-      <Stack.Screen name="TeacherAssignments" component={TeacherAssignmentScreen} />
       <Stack.Screen name="TeacherResults" component={TeacherResultsScreen} />
       <Stack.Screen name="TeacherNotifications" component={TeacherNotificationScreen} />
       <Stack.Screen name="TeacherEvents" component={TeacherEventsScreen} />

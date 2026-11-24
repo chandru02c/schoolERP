@@ -18,7 +18,6 @@ import ParentTimetableScreen from '../screens/parent/ParentTimetableScreen';
 import ParentCalendarScreen from '../screens/parent/ParentCalendarScreen';
 import ParentProfileScreen from '../screens/parent/ParentProfileScreen';
 import ParentAttendanceScreen from '../screens/parent/ParentAttendanceScreen';
-import ParentAssignmentScreen from '../screens/parent/ParentAssignmentScreen';
 import ParentResultScreen from '../screens/parent/ParentResultScreen';
 import ParentNotificationScreen from '../screens/parent/ParentNotificationScreen';
 import ParentEventsScreen from '../screens/parent/ParentEventsScreen';
@@ -110,7 +109,6 @@ export const ParentNavigator: React.FC = () => {
       <Stack.Screen name="ParentHome" component={ParentHomeScreen} />
       <Stack.Screen name="ParentAttendance" component={ParentAttendanceScreen} />
       <Stack.Screen name="ParentTimetable" component={ParentTimetableScreen} />
-      <Stack.Screen name="ParentAssignments" component={ParentAssignmentScreen} />
       <Stack.Screen name="ParentResults" component={ParentResultScreen} />
       <Stack.Screen name="ParentNotifications" component={ParentNotificationScreen} />
       <Stack.Screen name="ParentEvents" component={ParentEventsScreen} />

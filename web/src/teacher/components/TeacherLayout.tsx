@@ -78,14 +78,11 @@ const getTeacherNavSections = (teacherId: string | number): NavSection[] => [
         icon: <CheckCircleIcon />,
         children: [
           { label: 'Mark Attendance', path: `/teacher/${teacherId}/attendance/mark`, icon: <CheckCircleIcon /> },
-          { label: 'Attendance History', path: `/teacher/${teacherId}/attendance/history`, icon: <ScheduleIcon /> },
           { label: 'Student Attendance', path: `/teacher/${teacherId}/attendance/students`, icon: <PeopleIcon /> },
           { label: 'Attendance Summary', path: `/teacher/${teacherId}/attendance/summary`, icon: <BarChartIcon /> },
         ],
       },
-      { label: 'Assignments', path: `/teacher/${teacherId}/assignments`, icon: <AssignmentIcon />, badge: 2 },
       { label: 'Exams & Marks', path: `/teacher/${teacherId}/exams`, icon: <AssessmentIcon /> },
-      { label: 'Study Materials', path: `/teacher/${teacherId}/materials`, icon: <MenuBookIcon /> },
     ],
   },
   {
@@ -171,7 +168,8 @@ export const TeacherLayout: React.FC = () => {
   });
 
   const toggleMenu = (label: string) => {
-    setExpandedMenus((prev) => ({ ...prev, [label]: !prev[label] }));
+    // Accordion: Only one menu can remain expanded at a time
+    setExpandedMenus((prev) => (prev[label] ? {} : { [label]: true }));
   };
 
   const isActive = (path?: string) => {

@@ -3,7 +3,7 @@
  * Description: TypeScript interfaces for Attendance, Holiday, and Report models.
  */
 
-export type AttendanceStatusCode = 'PRESENT' | 'ABSENT' | 'LEAVE' | 'HOLIDAY';
+export type AttendanceStatusCode = 'PRESENT' | 'ABSENT' | 'HOLIDAY';
 
 export type HolidayType = 'NATIONAL' | 'FESTIVAL' | 'SCHOOL' | 'LOCAL' | 'EMERGENCY';
 
@@ -115,6 +115,7 @@ export interface SaveAttendancePayload {
   class_id: number | string;
   section_id: number | string;
   attendance_date: string;
+  session?: 'MORNING' | 'AFTERNOON' | 'BOTH';
   teacher_id?: number | string;
   status?: 'DRAFT' | 'SUBMITTED';
   remarks?: string;

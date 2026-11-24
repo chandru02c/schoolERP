@@ -193,6 +193,9 @@ export const handler = async (event) => {
         if (!body.marks || !Array.isArray(body.marks)) {
             return respond(400, false, 'marks is required');
         }
+        if (!body.teacher_id && userId) {
+            body.teacher_id = userId;
+        }
     } else if (action === 'PUBLISH_EXAM_MARKS' || action === 'SUBMIT_EXAM_MARKS') {
         if (!body.exam_id) {
             return respond(400, false, 'exam_id is required');

@@ -22,17 +22,15 @@ import {
   Class as ClassIcon,
   People as PeopleIcon,
   CheckCircle as CheckCircleIcon,
-  Assignment as AssignmentIcon,
   Campaign as CampaignIcon,
   EventBusy as EventBusyIcon,
   ArrowForward as ArrowForwardIcon,
-  Add as AddIcon,
 } from '@mui/icons-material';
 
 import AppCard from '../../components/common/AppCard';
 import { useAuth } from '../../hooks/useAuth';
 import { teacherApiService } from '../services/teacherApiService';
-import { TimetableSlot, TeacherAssignment, ExamScheduleItem, TeacherAnnouncement } from '../types';
+import { TimetableSlot, ExamScheduleItem, TeacherAnnouncement } from '../types';
 import {
   TeacherDashboardScheduleItem,
   TeacherDashboardExamItem,
@@ -119,7 +117,6 @@ export const TeacherDashboardPage: React.FC = () => {
     { day: 'Fri', date: '', present: 95, absent: 5 },
     { day: 'Sat', date: '', present: 90, absent: 10 },
   ]);
-  const [assignments, setAssignments] = useState<TeacherAssignment[]>([]);
   const [exams, setExams] = useState<(ExamScheduleItem | TeacherDashboardExamItem)[]>([]);
   const [announcements, setAnnouncements] = useState<TeacherAnnouncement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -183,9 +180,8 @@ export const TeacherDashboardPage: React.FC = () => {
           setExams(examList.slice(0, 3));
         }
 
-        // Empty state assignments and announcements as per requirements (not implemented in backend)
+        // Empty state announcements as per requirements (not implemented in backend)
         if (isMounted) {
-          setAssignments([]);
           setAnnouncements([]);
         }
       } catch (err) {
@@ -264,20 +260,6 @@ export const TeacherDashboardPage: React.FC = () => {
               }}
             >
               Mark Attendance
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={() => navigate(`/teacher/${tId}/assignments`)}
-              sx={{
-                borderColor: 'rgba(255,255,255,0.5)',
-                color: '#fff',
-                fontWeight: 700,
-                borderRadius: 2.5,
-                '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
-              }}
-            >
-              New Assignment
             </Button>
           </Box>
         </Paper>
@@ -430,71 +412,10 @@ export const TeacherDashboardPage: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* ── Bottom Section: Active Assignments, Upcoming Exams & Announcements ── */}
+      {/* ── Bottom Section: Upcoming Exams & Announcements ── */}
       <Grid container spacing={3}>
-        {/* Active Homework / Assignments (Empty State Preserved) */}
-        <Grid item xs={12} md={4}>
-          <AppCard
-            title="Assignments & Homework"
-            subtitle="Tracking submissions"
-            headerAction={
-              <IconButton size="small" onClick={() => navigate(`/teacher/${tId}/assignments`)}>
-                <ArrowForwardIcon fontSize="small" />
-              </IconButton>
-            }
-          >
-            {assignments.length === 0 ? (
-              <Box py={5} textAlign="center">
-                <AssignmentIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="body2" color="text.secondary" fontWeight={600}>
-                  No active assignments
-                </Typography>
-                <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
-                  Assignments created will appear here
-                </Typography>
-              </Box>
-            ) : (
-              <List disablePadding>
-                {assignments.map((a) => (
-                  <Box key={a.id} sx={{ mb: 2, p: 1.5, border: '1px solid #E2E8F0', borderRadius: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                      <Typography variant="body2" fontWeight={700} color="#0F172A" noWrap sx={{ maxWidth: 200 }}>
-                        {a.title}
-                      </Typography>
-                      <Chip
-                        label={a.status}
-                        size="small"
-                        sx={{
-                          height: 20,
-                          fontSize: '0.65rem',
-                          fontWeight: 700,
-                          bgcolor: a.status === 'ACTIVE' ? '#E0F2FE' : '#E8F5E9',
-                          color: a.status === 'ACTIVE' ? '#0369A1' : '#2E7D32',
-                        }}
-                      />
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                      {a.class_name} • Due: {a.due_date}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={(a.submissions_count / a.total_students) * 100}
-                        sx={{ flexGrow: 1, height: 6, borderRadius: 3, bgcolor: '#F1F5F9', '& .MuiLinearProgress-bar': { bgcolor: '#0D9488' } }}
-                      />
-                      <Typography variant="caption" fontWeight={700} color="text.secondary">
-                        {a.submissions_count}/{a.total_students}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </List>
-            )}
-          </AppCard>
-        </Grid>
-
         {/* Upcoming Exams */}
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={6}>
           <AppCard
             title="Upcoming Exams"
             subtitle="Assessments schedule"
@@ -557,7 +478,7 @@ export const TeacherDashboardPage: React.FC = () => {
         </Grid>
 
         {/* Notice Board (Empty State Preserved) */}
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={6}>
           <AppCard
             title="Notice Board"
             subtitle="Recent announcements"

@@ -44,20 +44,20 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
   const [report, setReport] = useState<{
     total_working_days: number;
     absent_days: number;
-    leave_days: number;
     present_days: number;
     attendance_percentage: number;
   }>({
     total_working_days: 0,
     absent_days: 0,
-    leave_days: 0,
     present_days: 0,
     attendance_percentage: 100,
   });
 
   const [historyRecords, setHistoryRecords] = useState<Array<{
     date: string;
-    status: 'PRESENT' | 'ABSENT' | 'LEAVE' | 'LATE';
+    morning_status: 'PRESENT' | 'ABSENT';
+    afternoon_status: 'PRESENT' | 'ABSENT';
+    status: 'PRESENT' | 'ABSENT';
     remarks?: string;
   }>>([]);
 
@@ -77,14 +77,12 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
       if (studentData) {
         const total = Number(studentData.total_working_days || 0);
         const absent = Number(studentData.absent_days || 0);
-        const leave = Number(studentData.leave_days || 0);
-        const present = Math.max(0, total - absent - leave);
+        const present = Math.max(0, total - absent);
         const pct = total > 0 ? Number(((present / total) * 100).toFixed(1)) : 100;
 
         setReport({
           total_working_days: total,
           absent_days: absent,
-          leave_days: leave,
           present_days: present,
           attendance_percentage: pct,
         });
@@ -97,15 +95,27 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
       });
 
       if (Array.isArray(hist?.history)) {
-        const mapped = hist.history.map((h: any) => ({
-          date: h.attendance_date || h.date,
-          status: (h.morning_absent_count > 0 ? 'ABSENT' : h.morning_leave_count > 0 ? 'LEAVE' : 'PRESENT') as any,
-          remarks: h.remarks,
-        }));
+        const mapped = hist.history.map((h: any) => {
+          const mStatus = (h.morning_absent_count > 0 ? 'ABSENT' : 'PRESENT') as 'PRESENT' | 'ABSENT';
+          const aStatus = (h.afternoon_absent_count > 0 ? 'ABSENT' : 'PRESENT') as 'PRESENT' | 'ABSENT';
+          const overall = (mStatus === 'ABSENT' || aStatus === 'ABSENT') ? 'ABSENT' : 'PRESENT';
+          return {
+            date: h.attendance_date || h.date,
+            morning_status: mStatus,
+            afternoon_status: aStatus,
+            status: overall as 'PRESENT' | 'ABSENT',
+            remarks: h.remarks,
+          };
+        });
         setHistoryRecords(mapped);
       } else {
         // Fallback to recent days
-        const days: Array<{ date: string; status: 'PRESENT' | 'ABSENT' | 'LEAVE' | 'LATE' }> = [];
+        const days: Array<{
+          date: string;
+          morning_status: 'PRESENT' | 'ABSENT';
+          afternoon_status: 'PRESENT' | 'ABSENT';
+          status: 'PRESENT' | 'ABSENT';
+        }> = [];
         const today = new Date();
         for (let i = 0; i < 7; i++) {
           const d = new Date(today);
@@ -113,6 +123,8 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
           if (d.getDay() !== 0) { // skip Sunday
             days.push({
               date: d.toISOString().split('T')[0],
+              morning_status: 'PRESENT',
+              afternoon_status: i === 4 ? 'ABSENT' : 'PRESENT',
               status: i === 4 ? 'ABSENT' : 'PRESENT',
             });
           }
@@ -143,8 +155,6 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
         return { bg: '#DCFCE7', text: colors.success, label: 'Present' };
       case 'ABSENT':
         return { bg: '#FEE2E2', text: colors.error, label: 'Absent' };
-      case 'LEAVE':
-        return { bg: '#FEF3C7', text: '#B45309', label: 'On Leave' };
       default:
         return { bg: '#E0EAFF', text: colors.primary, label: status };
     }
@@ -251,15 +261,8 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
                 <View style={styles.metricDivider} />
 
                 <View style={styles.metricItem}>
-                  <Text style={[styles.metricNumber, { color: colors.warning }]}>{report.leave_days}</Text>
-                  <Text style={styles.metricLabel}>Leaves</Text>
-                </View>
-
-                <View style={styles.metricDivider} />
-
-                <View style={styles.metricItem}>
                   <Text style={[styles.metricNumber, { color: colors.primary }]}>{report.total_working_days}</Text>
-                  <Text style={styles.metricLabel}>Total Days</Text>
+                  <Text style={styles.metricLabel}>Working Days</Text>
                 </View>
               </View>
             </View>
@@ -268,7 +271,7 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
             <View style={styles.historySection}>
               <View style={styles.historySectionHeader}>
                 <Text style={styles.sectionTitle}>Daily Attendance Log</Text>
-                <Text style={styles.sectionSub}>Recent classroom attendance records</Text>
+                <Text style={styles.sectionSub}>Session-wise attendance records (Morning & Afternoon)</Text>
               </View>
 
               {historyRecords.length === 0 ? (
@@ -278,10 +281,12 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
                 </View>
               ) : (
                 historyRecords.map((record, index) => {
-                  const badge = getStatusBadgeStyle(record.status);
                   const [yr, mo, dy] = (record.date || '').split('-');
                   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                   const monthStr = mo ? monthNames[parseInt(mo, 10) - 1] : '';
+
+                  const isMorningPresent = record.morning_status === 'PRESENT';
+                  const isAfternoonPresent = record.afternoon_status === 'PRESENT';
 
                   return (
                     <View key={index} style={styles.recordCard}>
@@ -292,17 +297,43 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
 
                       <View style={styles.recordInfoCol}>
                         <Text style={styles.recordTitle}>
-                          {record.status === 'PRESENT'
-                            ? 'Full Day Attendance'
-                            : record.status === 'ABSENT'
-                            ? 'Absent from Class'
-                            : 'Approved Leave'}
+                          {record.status === 'PRESENT' ? 'Present' : 'Absent'}
                         </Text>
                         <Text style={styles.recordDateFull}>{record.date}</Text>
                       </View>
 
-                      <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-                        <Text style={[styles.statusBadgeText, { color: badge.text }]}>{badge.label}</Text>
+                      {/* Session Badges */}
+                      <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                        <View
+                          style={[
+                            styles.sessionPill,
+                            { backgroundColor: isMorningPresent ? '#DCFCE7' : '#FEE2E2' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.sessionPillText,
+                              { color: isMorningPresent ? colors.success : colors.error },
+                            ]}
+                          >
+                            🌅 M: {isMorningPresent ? 'P' : 'A'}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.sessionPill,
+                            { backgroundColor: isAfternoonPresent ? '#DCFCE7' : '#FEE2E2' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.sessionPillText,
+                              { color: isAfternoonPresent ? colors.success : colors.error },
+                            ]}
+                          >
+                            ☀️ A: {isAfternoonPresent ? 'P' : 'A'}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   );
@@ -572,5 +603,16 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  sessionPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sessionPillText: {
+    fontSize: 10,
+    fontWeight: '800',
   },
 });

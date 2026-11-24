@@ -135,16 +135,12 @@ BEGIN
                 'section_id', COALESCE(s.section_id, v_section_name, v_section_id::VARCHAR),
                 'morning_status', CASE 
                     WHEN v_holiday.id IS NOT NULL THEN 'HOLIDAY'
-                    WHEN d.morning_status IS NOT NULL AND d.morning_status <> '' THEN d.morning_status
-                    WHEN d.status_id = 2 THEN 'ABSENT'
-                    WHEN d.status_id = 3 THEN 'LEAVE'
+                    WHEN d.morning_status = 'ABSENT' OR (d.morning_status IS NULL AND d.status_id = 2) THEN 'ABSENT'
                     ELSE 'PRESENT'
                 END,
                 'afternoon_status', CASE 
                     WHEN v_holiday.id IS NOT NULL THEN 'HOLIDAY'
-                    WHEN d.afternoon_status IS NOT NULL AND d.afternoon_status <> '' THEN d.afternoon_status
-                    WHEN d.status_id = 2 THEN 'ABSENT'
-                    WHEN d.status_id = 3 THEN 'LEAVE'
+                    WHEN d.afternoon_status = 'ABSENT' OR (d.afternoon_status IS NULL AND d.status_id = 2) THEN 'ABSENT'
                     ELSE 'PRESENT'
                 END,
                 'morning_remarks', COALESCE(d.morning_remarks, d.remarks, ''),
@@ -152,7 +148,6 @@ BEGIN
                 'status', CASE 
                     WHEN v_holiday.id IS NOT NULL THEN 'HOLIDAY'
                     WHEN d.status_id = 2 OR d.morning_status = 'ABSENT' OR d.afternoon_status = 'ABSENT' THEN 'ABSENT'
-                    WHEN d.status_id = 3 OR d.morning_status = 'LEAVE' OR d.afternoon_status = 'LEAVE' THEN 'LEAVE'
                     ELSE 'PRESENT'
                 END,
                 'remarks', COALESCE(d.remarks, d.morning_remarks, d.afternoon_remarks, '')
@@ -199,15 +194,15 @@ BEGIN
                 'id', v_header.id,
                 'status', v_header.status,
                 'total_students', v_header.total_students,
-                'present_count', GREATEST(0, v_header.total_students - v_header.absent_count - v_header.leave_count),
+                'present_count', GREATEST(0, v_header.total_students - v_header.absent_count),
                 'absent_count', v_header.absent_count,
-                'leave_count', v_header.leave_count,
-                'morning_present_count', GREATEST(0, v_header.total_students - v_header.morning_absent_count - v_header.morning_leave_count),
-                'morning_absent_count', v_header.morning_absent_count,
-                'morning_leave_count', v_header.morning_leave_count,
-                'afternoon_present_count', GREATEST(0, v_header.total_students - v_header.afternoon_absent_count - v_header.afternoon_leave_count),
-                'afternoon_absent_count', v_header.afternoon_absent_count,
-                'afternoon_leave_count', v_header.afternoon_leave_count,
+                'leave_count', 0,
+                'morning_present_count', GREATEST(0, v_header.total_students - COALESCE(v_header.morning_absent_count, 0)),
+                'morning_absent_count', COALESCE(v_header.morning_absent_count, 0),
+                'morning_leave_count', 0,
+                'afternoon_present_count', GREATEST(0, v_header.total_students - COALESCE(v_header.afternoon_absent_count, 0)),
+                'afternoon_absent_count', COALESCE(v_header.afternoon_absent_count, 0),
+                'afternoon_leave_count', 0,
                 'teacher_name', v_header.teacher_name,
                 'remarks', v_header.remarks,
                 'updated_at', v_header.updated_at
@@ -231,18 +226,18 @@ BEGIN
                 'teacher_id', h.teacher_id,
                 'teacher_name', COALESCE(t.full_name, 'Staff'),
                 'total_students', h.total_students,
-                'present_count', GREATEST(0, h.total_students - h.absent_count - h.leave_count),
+                'present_count', GREATEST(0, h.total_students - h.absent_count),
                 'absent_count', h.absent_count,
-                'leave_count', h.leave_count,
-                'morning_present_count', GREATEST(0, h.total_students - COALESCE(h.morning_absent_count, h.absent_count, 0) - COALESCE(h.morning_leave_count, h.leave_count, 0)),
+                'leave_count', 0,
+                'morning_present_count', GREATEST(0, h.total_students - COALESCE(h.morning_absent_count, h.absent_count, 0)),
                 'morning_absent_count', COALESCE(h.morning_absent_count, h.absent_count, 0),
-                'morning_leave_count', COALESCE(h.morning_leave_count, h.leave_count, 0),
-                'afternoon_present_count', GREATEST(0, h.total_students - COALESCE(h.afternoon_absent_count, h.absent_count, 0) - COALESCE(h.afternoon_leave_count, h.leave_count, 0)),
+                'morning_leave_count', 0,
+                'afternoon_present_count', GREATEST(0, h.total_students - COALESCE(h.afternoon_absent_count, h.absent_count, 0)),
                 'afternoon_absent_count', COALESCE(h.afternoon_absent_count, h.absent_count, 0),
-                'afternoon_leave_count', COALESCE(h.afternoon_leave_count, h.leave_count, 0),
+                'afternoon_leave_count', 0,
                 'attendance_percentage', CASE 
                     WHEN h.total_students > 0 
-                    THEN ROUND(((h.total_students - h.absent_count - h.leave_count)::NUMERIC / h.total_students) * 100, 1)
+                    THEN ROUND(((h.total_students - h.absent_count)::NUMERIC / h.total_students) * 100, 1)
                     ELSE 0 
                 END,
                 'status', h.status,
@@ -326,16 +321,7 @@ ELSIF v_action = 'GET_CLASS_REPORT' THEN
                   AND (v_start_date IS NULL OR h.attendance_date >= v_start_date)
                   AND (v_end_date IS NULL OR h.attendance_date <= v_end_date)
             ), 0) AS total_absent_records,
-            COALESCE((
-                SELECT SUM(h.leave_count)
-                FROM school.attendance_header h
-                WHERE h.class_id = c.class_id
-                  AND h.org_id = c.org_id
-                  AND h.is_deleted = FALSE
-                  AND (v_academic_id IS NULL OR h.academic_id = v_academic_id)
-                  AND (v_start_date IS NULL OR h.attendance_date >= v_start_date)
-                  AND (v_end_date IS NULL OR h.attendance_date <= v_end_date)
-            ), 0) AS total_leave_records
+            0 AS total_leave_records
         FROM school.class_master c
         WHERE c.org_id = p_org_id
           AND (v_class_id IS NULL OR c.class_id = v_class_id)
@@ -349,12 +335,12 @@ ELSIF v_action = 'GET_CLASS_REPORT' THEN
                 'total_students', cs.total_students,
                 'working_days', cs.working_days,
                 'total_absent_records', cs.total_absent_records,
-                'total_leave_records', cs.total_leave_records,
+                'total_leave_records', 0,
                 'total_student_days', (cs.total_students * cs.working_days),
-                'present_student_days', GREATEST(0, (cs.total_students * cs.working_days) - cs.total_absent_records - cs.total_leave_records),
+                'present_student_days', GREATEST(0, (cs.total_students * cs.working_days) - cs.total_absent_records),
                 'attendance_percentage', CASE 
                     WHEN (cs.total_students * cs.working_days) > 0 
-                    THEN ROUND(((GREATEST(0, (cs.total_students * cs.working_days) - cs.total_absent_records - cs.total_leave_records))::NUMERIC / (cs.total_students * cs.working_days)) * 100, 1)
+                    THEN ROUND(((GREATEST(0, (cs.total_students * cs.working_days) - cs.total_absent_records))::NUMERIC / (cs.total_students * cs.working_days)) * 100, 1)
                     ELSE 0
                 END
             )
@@ -408,18 +394,7 @@ ELSIF v_action = 'GET_CLASS_REPORT' THEN
                       AND (v_end_date IS NULL OR ah.attendance_date <= v_end_date)
                       AND ad.is_deleted = FALSE
                 ),
-                'leave_days', (
-                    SELECT COUNT(*) 
-                    FROM school.attendance_details ad
-                    JOIN school.attendance_header ah ON ah.id = ad.attendance_header_id
-                    WHERE ad.org_id = p_org_id 
-                      AND ad.student_id = s.student_id 
-                      AND (ad.status_id = 3 OR ad.morning_status = 'LEAVE' OR ad.afternoon_status = 'LEAVE')
-                      AND (v_academic_id IS NULL OR ah.academic_id = v_academic_id)
-                      AND (v_start_date IS NULL OR ah.attendance_date >= v_start_date)
-                      AND (v_end_date IS NULL OR ah.attendance_date <= v_end_date)
-                      AND ad.is_deleted = FALSE
-                ),
+                'leave_days', 0,
                 'morning_absent_days', (
                     SELECT COUNT(*) 
                     FROM school.attendance_details ad
@@ -432,18 +407,7 @@ ELSIF v_action = 'GET_CLASS_REPORT' THEN
                       AND (v_end_date IS NULL OR ah.attendance_date <= v_end_date)
                       AND ad.is_deleted = FALSE
                 ),
-                'morning_leave_days', (
-                    SELECT COUNT(*) 
-                    FROM school.attendance_details ad
-                    JOIN school.attendance_header ah ON ah.id = ad.attendance_header_id
-                    WHERE ad.org_id = p_org_id 
-                      AND ad.student_id = s.student_id 
-                      AND (ad.morning_status = 'LEAVE' OR (ad.morning_status IS NULL AND ad.status_id = 3))
-                      AND (v_academic_id IS NULL OR ah.academic_id = v_academic_id)
-                      AND (v_start_date IS NULL OR ah.attendance_date >= v_start_date)
-                      AND (v_end_date IS NULL OR ah.attendance_date <= v_end_date)
-                      AND ad.is_deleted = FALSE
-                ),
+                'morning_leave_days', 0,
                 'afternoon_absent_days', (
                     SELECT COUNT(*) 
                     FROM school.attendance_details ad
@@ -456,18 +420,7 @@ ELSIF v_action = 'GET_CLASS_REPORT' THEN
                       AND (v_end_date IS NULL OR ah.attendance_date <= v_end_date)
                       AND ad.is_deleted = FALSE
                 ),
-                'afternoon_leave_days', (
-                    SELECT COUNT(*) 
-                    FROM school.attendance_details ad
-                    JOIN school.attendance_header ah ON ah.id = ad.attendance_header_id
-                    WHERE ad.org_id = p_org_id 
-                      AND ad.student_id = s.student_id 
-                      AND (ad.afternoon_status = 'LEAVE' OR (ad.afternoon_status IS NULL AND ad.status_id = 3))
-                      AND (v_academic_id IS NULL OR ah.academic_id = v_academic_id)
-                      AND (v_start_date IS NULL OR ah.attendance_date >= v_start_date)
-                      AND (v_end_date IS NULL OR ah.attendance_date <= v_end_date)
-                      AND ad.is_deleted = FALSE
-                )
+                'afternoon_leave_days', 0
             ) ORDER BY COALESCE(e.roll_number, s.roll_no, ''), a.student_first_name ASC
         ), '[]'::jsonb) INTO v_student_report
         FROM school.student_master s
@@ -509,7 +462,7 @@ ELSIF v_action = 'GET_CLASS_REPORT' THEN
             'total_classes', (SELECT COUNT(*) FROM school.class_master WHERE org_id = p_org_id AND is_deleted = FALSE),
             'working_days', (SELECT COUNT(DISTINCT attendance_date) FROM school.attendance_header WHERE org_id = p_org_id AND is_deleted = FALSE),
             'total_absent_count', COALESCE((SELECT SUM(absent_count) FROM school.attendance_header WHERE org_id = p_org_id AND is_deleted = FALSE), 0),
-            'total_leave_count', COALESCE((SELECT SUM(leave_count) FROM school.attendance_header WHERE org_id = p_org_id AND is_deleted = FALSE), 0)
+            'total_leave_count', 0
         ) INTO v_summary;
 
         RETURN jsonb_build_object('success', TRUE, 'summary', v_summary);
@@ -538,10 +491,7 @@ ELSIF v_action = 'GET_CLASS_REPORT' THEN
                 SELECT SUM(absent_count) FROM school.attendance_header 
                 WHERE org_id = p_org_id AND attendance_date = v_attendance_date AND is_deleted = FALSE
             ), 0),
-            'today_leave_count', COALESCE((
-                SELECT SUM(leave_count) FROM school.attendance_header 
-                WHERE org_id = p_org_id AND attendance_date = v_attendance_date AND is_deleted = FALSE
-            ), 0),
+            'today_leave_count', 0,
             'today_total_recorded_students', COALESCE((
                 SELECT SUM(total_students) FROM school.attendance_header 
                 WHERE org_id = p_org_id AND attendance_date = v_attendance_date AND is_deleted = FALSE
