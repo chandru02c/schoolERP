@@ -64,7 +64,10 @@ export const handler = async (event) => {
         return orgValidation.response;
     }
 
-    const action = (queryParams.action || body.action || 'GET_DAILY_SHEET').toUpperCase();
+    let action = (queryParams.action || body.action || 'GET_DAILY_SHEET').toUpperCase();
+    if (action === 'GET_HOLIDAY_LIST') {
+        action = 'GET_HOLIDAYS';
+    }
     const teacherId = Number(queryParams.teacher_id || body.teacher_id || headers['x-user-id'] || headers['X-User-Id'] || 0);
     const classId = queryParams.class_id || body.class_id || null;
 
@@ -128,7 +131,7 @@ export const handler = async (event) => {
             try {
                 const sIds = result.students.map(s => Number(s.student_id)).filter(id => !isNaN(id) && id > 0);
                 if (sIds.length > 0) {
-                    const photoRows = await dbQuery(
+                    const photoRows = await dbExecute(
                         `SELECT sm.student_id, doc.s3_key, adm.student_photo
                          FROM school.student_master sm
                          LEFT JOIN school.admission_application adm ON sm.admission_id = adm.id AND sm.org_id = adm.org_id
@@ -137,8 +140,8 @@ export const handler = async (event) => {
                          ORDER BY doc.created_at DESC;`,
                         [orgId, sIds]
                     );
-                    const photoList = Array.isArray(photoRows) ? photoRows : (photoRows?.data || []);
-                    if (Array.isArray(photoList) && photoList.length > 0) {
+                    const photoList = Array.isArray(photoRows) ? photoRows : [];
+                    if (photoList.length > 0) {
                         const photoMap = new Map();
                         photoList.forEach(p => {
                             if (!photoMap.has(Number(p.student_id))) {
@@ -160,7 +163,7 @@ export const handler = async (event) => {
             }
         }
 
-        // Enrich student report with active academic year and configured holidays for parent calculation
+        // Enrich student report with active academic year, holidays, and absent exceptions for parent calculation
         if (action === 'GET_STUDENT_REPORT') {
             try {
                 if (!activeYear) {
@@ -169,14 +172,53 @@ export const handler = async (event) => {
                 if (activeYear) {
                     result.academic_year = activeYear;
                 }
-                const holidayRows = await dbQuery(
-                    `SELECT id, holiday_name, holiday_type, holiday_date, description
+                const holidayRows = await dbExecute(
+                    `SELECT id, holiday_name, holiday_type, TO_CHAR(holiday_date, 'YYYY-MM-DD') AS holiday_date, description
                      FROM school.holiday_master
                      WHERE org_id = $1 AND is_deleted = FALSE
                      ORDER BY holiday_date ASC;`,
                     [orgId]
                 );
-                result.holidays = Array.isArray(holidayRows) ? holidayRows : (holidayRows?.holidays || []);
+                result.holidays = Array.isArray(holidayRows) ? holidayRows : [];
+
+                const studentId = params.student_id
+                    ? Number(params.student_id)
+                    : (result?.students?.[0]?.student_id ? Number(result.students[0].student_id) : null);
+
+                if (studentId) {
+                    const absentRows = await dbExecute(
+                        `SELECT 
+                            TO_CHAR(ah.attendance_date, 'YYYY-MM-DD') AS attendance_date,
+                            COALESCE(ad.morning_status, 'ABSENT') AS morning_status,
+                            COALESCE(ad.afternoon_status, 'ABSENT') AS afternoon_status,
+                            'ABSENT' AS status,
+                            COALESCE(ad.remarks, ad.morning_remarks, ad.afternoon_remarks, 'Absent') AS remarks
+                         FROM school.attendance_details ad
+                         JOIN school.attendance_header ah ON ah.id = ad.attendance_header_id
+                         WHERE ad.org_id = $1 
+                           AND ad.student_id = $2::BIGINT
+                           AND (ad.status_id = 2 OR ad.morning_status = 'ABSENT' OR ad.afternoon_status = 'ABSENT')
+                           AND ad.is_deleted = FALSE
+                           AND ah.is_deleted = FALSE
+                         ORDER BY ah.attendance_date DESC;`,
+                        [orgId, studentId]
+                    );
+                    const validAbsentList = Array.isArray(absentRows) ? absentRows : [];
+                    result.absent_records = validAbsentList;
+                    if (result.students && Array.isArray(result.students) && result.students.length > 0) {
+                        result.students = result.students.map(st => {
+                            if (Number(st.student_id) === studentId) {
+                                return {
+                                    ...st,
+                                    absent_records: validAbsentList.length > 0
+                                        ? validAbsentList
+                                        : (st.absent_records || [])
+                                };
+                            }
+                            return st;
+                        });
+                    }
+                }
             } catch (extraErr) {
                 console.warn('[school_get_attendance] Extra metadata warning:', extraErr.message);
             }

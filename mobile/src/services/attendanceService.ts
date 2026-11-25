@@ -52,6 +52,21 @@ export interface SaveAttendancePayload {
   }>;
 }
 
+export function normalizeDateString(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.includes('T')) return trimmed.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  }
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export const attendanceService = {
   /**
    * Fetch daily attendance sheet for assigned class & section
@@ -245,30 +260,47 @@ export const attendanceService = {
     absentRecords?: any[];
     holidays?: any[];
   }): CalculatedAttendanceResult {
-    const end = options.endDate ? new Date(options.endDate) : new Date();
-    end.setHours(23, 59, 59, 999);
+    let end: Date;
+    if (options.endDate) {
+      if (typeof options.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(options.endDate.trim())) {
+        const [ey, em, ed] = options.endDate.trim().split('-').map(Number);
+        end = new Date(ey, em - 1, ed, 23, 59, 59, 999);
+      } else {
+        end = new Date(options.endDate);
+        end.setHours(23, 59, 59, 999);
+      }
+    } else {
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+    }
 
     let start: Date;
     if (options.startDate) {
-      start = new Date(options.startDate);
+      if (typeof options.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(options.startDate.trim())) {
+        const [sy, sm, sd] = options.startDate.trim().split('-').map(Number);
+        start = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+      } else {
+        start = new Date(options.startDate);
+        start.setHours(0, 0, 0, 0);
+      }
     } else {
       // Default to June 1st of current academic year
       const currentYear = end.getMonth() >= 5 ? end.getFullYear() : end.getFullYear() - 1;
-      start = new Date(currentYear, 5, 1);
+      start = new Date(currentYear, 5, 1, 0, 0, 0, 0);
     }
 
     if (isNaN(start.getTime()) || start > end) {
       start = new Date(end);
       start.setDate(end.getDate() - 60);
+      start.setHours(0, 0, 0, 0);
     }
-    start.setHours(0, 0, 0, 0);
 
     // Map holidays: key YYYY-MM-DD -> holiday name
     const holidayMap = new Map<string, string>();
     (options.holidays || []).forEach((h: any) => {
       const rawDate = h.holiday_date || h.date;
-      if (rawDate) {
-        const dStr = String(rawDate).split('T')[0];
+      const dStr = normalizeDateString(rawDate);
+      if (dStr) {
         holidayMap.set(dStr, h.holiday_name || h.name || 'School Holiday');
       }
     });
@@ -277,8 +309,8 @@ export const attendanceService = {
     const absentMap = new Map<string, any>();
     (options.absentRecords || []).forEach((r: any) => {
       const rawDate = r.attendance_date || r.date;
-      if (rawDate) {
-        const dStr = String(rawDate).split('T')[0];
+      const dStr = normalizeDateString(rawDate);
+      if (dStr) {
         absentMap.set(dStr, r);
       }
     });
@@ -359,13 +391,23 @@ export const attendanceService = {
       ? Number(((presentDays / totalWorkingDays) * 100).toFixed(1))
       : 100.0;
 
+    const sYear = start.getFullYear();
+    const sMonth = String(start.getMonth() + 1).padStart(2, '0');
+    const sDay = String(start.getDate()).padStart(2, '0');
+    const formattedStartDate = `${sYear}-${sMonth}-${sDay}`;
+
+    const eYear = end.getFullYear();
+    const eMonth = String(end.getMonth() + 1).padStart(2, '0');
+    const eDay = String(end.getDate()).padStart(2, '0');
+    const formattedEndDate = `${eYear}-${eMonth}-${eDay}`;
+
     return {
       total_working_days: totalWorkingDays,
       present_days: presentDays,
       absent_days: absentDays,
       attendance_percentage: attendancePercentage,
-      start_date: start.toISOString().split('T')[0],
-      end_date: end.toISOString().split('T')[0],
+      start_date: formattedStartDate,
+      end_date: formattedEndDate,
       daily_records: dailyRecords,
     };
   },

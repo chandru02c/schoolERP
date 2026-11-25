@@ -78,16 +78,61 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
       const startDate =
         reportRes?.academic_year?.start_date ||
         reportRes?.academic_year?.academic_year_start ||
+        reportRes?.data?.academic_year?.start_date ||
+        reportRes?.data?.academic_year?.academic_year_start ||
         '2026-06-01';
 
-      const holidays =
-        Array.isArray(reportRes?.holidays) && reportRes.holidays.length > 0
-          ? reportRes.holidays
-          : await attendanceService.getHolidays();
+      let holidays: any[] = [];
+      if (Array.isArray(reportRes?.holidays) && reportRes.holidays.length > 0) {
+        holidays = reportRes.holidays;
+      } else if (Array.isArray(reportRes?.data?.holidays) && reportRes.data.holidays.length > 0) {
+        holidays = reportRes.data.holidays;
+      } else {
+        try {
+          holidays = await attendanceService.getHolidays();
+        } catch {
+          holidays = [];
+        }
+      }
 
-      const absentRecords = Array.isArray(reportRes?.absent_records)
-        ? reportRes.absent_records
+      // Find student data if returned in students list
+      const studentsList = Array.isArray(reportRes?.students)
+        ? reportRes.students
+        : Array.isArray(reportRes?.data?.students)
+        ? reportRes.data.students
         : [];
+
+      const studentData = studentsList.find(
+        (s: any) => String(s.student_id) === String(activeStudent.student_id)
+      ) || studentsList[0];
+
+      let absentRecords: any[] = [];
+      if (Array.isArray(reportRes?.absent_records) && reportRes.absent_records.length > 0) {
+        absentRecords = reportRes.absent_records;
+      } else if (Array.isArray(studentData?.absent_records) && studentData.absent_records.length > 0) {
+        absentRecords = studentData.absent_records;
+      } else if (Array.isArray(reportRes?.data?.absent_records) && reportRes.data.absent_records.length > 0) {
+        absentRecords = reportRes.data.absent_records;
+      }
+
+      // Fallback: If no absent records yet, check getHistory for this student
+      if (absentRecords.length === 0) {
+        try {
+          const histRes = await attendanceService.getHistory({ student_id: activeStudent.student_id });
+          const rawHist = Array.isArray(histRes) ? histRes : histRes?.history || histRes?.data || [];
+          if (Array.isArray(rawHist) && rawHist.length > 0) {
+            absentRecords = rawHist.filter(
+              (item: any) =>
+                item.status === 'ABSENT' ||
+                item.status_id === 2 ||
+                item.morning_status === 'ABSENT' ||
+                item.afternoon_status === 'ABSENT'
+            );
+          }
+        } catch (hErr) {
+          console.warn('[ParentAttendanceScreen] Fallback history fetch error:', hErr);
+        }
+      }
 
       // 2. Calculate attendance using exception-based calculation
       const calcResult = attendanceService.calculateParentAttendance({
