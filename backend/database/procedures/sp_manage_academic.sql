@@ -73,6 +73,13 @@ DECLARE
     -- Exam & Marks variables
     v_exam_id BIGINT;
     v_exam_name VARCHAR(150);
+
+    -- Timetable variables
+    v_timetable_id BIGINT;
+    v_periods JSONB;
+    v_period_item JSONB;
+    v_source_set_id BIGINT;
+    v_conflict_rec RECORD;
     v_exam_type VARCHAR(50);
     v_exam_date DATE;
     v_max_marks NUMERIC(5,2);
@@ -1237,6 +1244,222 @@ BEGIN
             'success', TRUE,
             'message', 'Exam marks published successfully.',
             'data', jsonb_build_object('exam_id', v_exam_id, 'status', 'PUBLISHED'),
+            'timestamp', CURRENT_TIMESTAMP
+        );
+        RETURN;
+
+    -- =========================================================================
+    -- TIMETABLE ACTIONS
+    -- =========================================================================
+
+    -- SAVE_TIMETABLE (Create or update weekly class timetable with teacher conflict validation)
+    ELSIF p_action = 'SAVE_TIMETABLE' THEN
+        v_set_id := (p_data->>'academic_set_id')::BIGINT;
+        IF v_set_id IS NULL OR v_set_id <= 0 THEN
+            p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_SET_ID_REQUIRED', 'message', 'academic_set_id is required.', 'timestamp', CURRENT_TIMESTAMP);
+            RETURN;
+        END IF;
+
+        -- Resolve academic_year_id, class_id, section
+        v_target_year_id := (p_data->>'academic_year_id')::BIGINT;
+        SELECT academic_year_id, class_id, section
+        INTO v_year_id, v_class_id, v_section
+        FROM school.academic_set
+        WHERE academic_set_id = v_set_id AND org_id = p_org_id AND is_deleted = FALSE;
+
+        IF v_class_id IS NULL THEN
+            p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_SET_NOT_FOUND', 'message', 'Academic Set not found.', 'timestamp', CURRENT_TIMESTAMP);
+            RETURN;
+        END IF;
+
+        IF v_target_year_id IS NULL OR v_target_year_id <= 0 THEN
+            v_target_year_id := v_year_id;
+        END IF;
+
+        v_periods := COALESCE(p_data->'periods', '[]'::jsonb);
+
+        -- ==================== CONFLICT VALIDATION ====================
+        -- Check if any assigned teacher is double-booked on the same day and period in another class
+        FOR v_period_item IN SELECT * FROM jsonb_array_elements(v_periods) LOOP
+            v_teacher_id := NULLIF((v_period_item->>'teacher_id')::BIGINT, 0);
+
+            IF v_teacher_id IS NOT NULL AND v_teacher_id > 0 THEN
+                SELECT
+                    td.timetable_id,
+                    s.academic_set_id,
+                    COALESCE(cm.class_name, 'Class ' || s.class_id) AS class_name,
+                    s.section,
+                    COALESCE(t_detail.full_name, TRIM(CONCAT(t_detail.first_name, ' ', t_detail.last_name))) AS teacher_name
+                INTO v_conflict_rec
+                FROM school.timetable_detail td
+                JOIN school.timetable_master tm ON td.timetable_id = tm.timetable_id AND td.org_id = tm.org_id
+                JOIN school.academic_set s ON tm.academic_set_id = s.academic_set_id AND tm.org_id = s.org_id
+                LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
+                LEFT JOIN school.teacher_details t_detail ON td.teacher_id = t_detail.teacher_id AND td.org_id = t_detail.org_id
+                WHERE td.org_id = p_org_id
+                  AND tm.academic_year_id = v_target_year_id
+                  AND tm.academic_set_id <> v_set_id
+                  AND tm.is_deleted = FALSE
+                  AND td.is_deleted = FALSE
+                  AND td.teacher_id = v_teacher_id
+                  AND td.day_of_week = v_period_item->>'day_of_week'
+                  AND td.period_number = (v_period_item->>'period_number')::INT
+                LIMIT 1;
+
+                IF v_conflict_rec.academic_set_id IS NOT NULL THEN
+                    p_response := jsonb_build_object(
+                        'success', FALSE,
+                        'error_code', 'ERR_TEACHER_CONFLICT',
+                        'message', format('Teacher %s is already scheduled for %s - %s on %s at Period %s (%s - %s).',
+                            COALESCE(v_conflict_rec.teacher_name, 'Selected Faculty'),
+                            v_conflict_rec.class_name,
+                            v_conflict_rec.section,
+                            v_period_item->>'day_of_week',
+                            v_period_item->>'period_number',
+                            v_period_item->>'start_time',
+                            v_period_item->>'end_time'
+                        ),
+                        'timestamp', CURRENT_TIMESTAMP
+                    );
+                    RETURN;
+                END IF;
+            END IF;
+        END LOOP;
+
+        -- Upsert Timetable Master
+        INSERT INTO school.timetable_master (
+            org_id, academic_year_id, academic_set_id, class_id, section, timetable_name,
+            description, status, is_active, updated_by, created_by
+        ) VALUES (
+            p_org_id, v_target_year_id, v_set_id, v_class_id, v_section,
+            COALESCE(p_data->>'timetable_name', 'Weekly Class Timetable'),
+            p_data->>'description', 'ACTIVE', TRUE, p_user_id, p_user_id
+        )
+        ON CONFLICT (org_id, academic_year_id, academic_set_id)
+        DO UPDATE SET
+            class_id = EXCLUDED.class_id,
+            section = EXCLUDED.section,
+            timetable_name = EXCLUDED.timetable_name,
+            description = EXCLUDED.description,
+            status = 'ACTIVE',
+            is_active = TRUE,
+            is_deleted = FALSE,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = p_user_id
+        RETURNING timetable_id INTO v_timetable_id;
+
+        -- Replace periods
+        DELETE FROM school.timetable_detail WHERE timetable_id = v_timetable_id AND org_id = p_org_id;
+
+        FOR v_period_item IN SELECT * FROM jsonb_array_elements(v_periods) LOOP
+            INSERT INTO school.timetable_detail (
+                timetable_id, org_id, day_of_week, period_number, start_time, end_time,
+                subject_name, subject_code, teacher_id, room_number, color
+            ) VALUES (
+                v_timetable_id,
+                p_org_id,
+                v_period_item->>'day_of_week',
+                (v_period_item->>'period_number')::INT,
+                v_period_item->>'start_time',
+                v_period_item->>'end_time',
+                COALESCE(v_period_item->>'subject_name', 'Subject'),
+                v_period_item->>'subject_code',
+                NULLIF((v_period_item->>'teacher_id')::BIGINT, 0),
+                v_period_item->>'room_number',
+                COALESCE(v_period_item->>'color', '#3B82F6')
+            );
+        END LOOP;
+
+        p_response := jsonb_build_object(
+            'success', TRUE,
+            'message', 'Class timetable saved successfully.',
+            'data', jsonb_build_object('timetable_id', v_timetable_id, 'academic_set_id', v_set_id, 'period_count', jsonb_array_length(v_periods)),
+            'timestamp', CURRENT_TIMESTAMP
+        );
+        RETURN;
+
+    -- COPY_TIMETABLE (Copy entire weekly timetable from source set to target set)
+    ELSIF p_action = 'COPY_TIMETABLE' THEN
+        v_source_set_id := (p_data->>'source_set_id')::BIGINT;
+        v_set_id := (p_data->>'target_set_id')::BIGINT;
+
+        IF v_source_set_id IS NULL OR v_set_id IS NULL THEN
+            p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_MISSING_SETS', 'message', 'source_set_id and target_set_id are required.', 'timestamp', CURRENT_TIMESTAMP);
+            RETURN;
+        END IF;
+
+        -- Find source timetable
+        SELECT timetable_id INTO v_timetable_id
+        FROM school.timetable_master
+        WHERE academic_set_id = v_source_set_id AND org_id = p_org_id AND is_deleted = FALSE
+        LIMIT 1;
+
+        IF v_timetable_id IS NULL THEN
+            p_response := jsonb_build_object('success', FALSE, 'error_code', 'ERR_SOURCE_TIMETABLE_NOT_FOUND', 'message', 'Source timetable does not exist.', 'timestamp', CURRENT_TIMESTAMP);
+            RETURN;
+        END IF;
+
+        -- Find target set info
+        SELECT academic_year_id, class_id, section
+        INTO v_target_year_id, v_class_id, v_section
+        FROM school.academic_set
+        WHERE academic_set_id = v_set_id AND org_id = p_org_id AND is_deleted = FALSE;
+
+        -- Upsert target timetable
+        INSERT INTO school.timetable_master (
+            org_id, academic_year_id, academic_set_id, class_id, section, timetable_name, updated_by, created_by
+        ) VALUES (
+            p_org_id, v_target_year_id, v_set_id, v_class_id, v_section, 'Weekly Class Timetable (Copied)', p_user_id, p_user_id
+        )
+        ON CONFLICT (org_id, academic_year_id, academic_set_id)
+        DO UPDATE SET
+            is_deleted = FALSE,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = p_user_id
+        RETURNING timetable_id INTO v_enrollment_id; -- reuse variable for target timetable_id
+
+        DELETE FROM school.timetable_detail WHERE timetable_id = v_enrollment_id AND org_id = p_org_id;
+
+        -- Copy periods
+        INSERT INTO school.timetable_detail (
+            timetable_id, org_id, day_of_week, period_number, start_time, end_time,
+            subject_name, subject_code, teacher_id, room_number, color
+        )
+        SELECT
+            v_enrollment_id, p_org_id, day_of_week, period_number, start_time, end_time,
+            subject_name, subject_code, teacher_id, room_number, color
+        FROM school.timetable_detail
+        WHERE timetable_id = v_timetable_id AND org_id = p_org_id AND is_deleted = FALSE;
+
+        p_response := jsonb_build_object(
+            'success', TRUE,
+            'message', 'Timetable copied successfully to target class.',
+            'data', jsonb_build_object('target_timetable_id', v_enrollment_id, 'target_set_id', v_set_id),
+            'timestamp', CURRENT_TIMESTAMP
+        );
+        RETURN;
+
+    -- DELETE_TIMETABLE
+    ELSIF p_action = 'DELETE_TIMETABLE' THEN
+        v_timetable_id := (p_data->>'timetable_id')::BIGINT;
+        IF v_timetable_id IS NULL THEN
+            v_set_id := (p_data->>'academic_set_id')::BIGINT;
+            SELECT timetable_id INTO v_timetable_id
+            FROM school.timetable_master
+            WHERE academic_set_id = v_set_id AND org_id = p_org_id AND is_deleted = FALSE;
+        END IF;
+
+        IF v_timetable_id IS NOT NULL THEN
+            UPDATE school.timetable_master SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP, updated_by = p_user_id
+            WHERE timetable_id = v_timetable_id AND org_id = p_org_id;
+
+            UPDATE school.timetable_detail SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP
+            WHERE timetable_id = v_timetable_id AND org_id = p_org_id;
+        END IF;
+
+        p_response := jsonb_build_object(
+            'success', TRUE,
+            'message', 'Timetable deleted successfully.',
             'timestamp', CURRENT_TIMESTAMP
         );
         RETURN;

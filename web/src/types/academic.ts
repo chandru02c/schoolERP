@@ -157,6 +157,59 @@ export interface AcademicDashboardStats {
   upcoming_holidays_count: number;
 }
 
+export interface TimetablePeriod {
+  period_id?: number;
+  day_of_week: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+  period_number: number;
+  start_time: string;
+  end_time: string;
+  subject_name: string;
+  subject_code?: string;
+  teacher_id: number;
+  teacher_name?: string;
+  academic_set_id?: number;
+  class_id?: number;
+  class_name?: string;
+  section?: string;
+  room_number?: string;
+  color?: string;
+}
+
+export interface TimetableMasterItem {
+  timetable_id: number;
+  org_id: number;
+  academic_year_id: number;
+  year_name?: string;
+  academic_set_id: number;
+  set_name: string;
+  class_id: number;
+  class_name: string;
+  section: string;
+  timetable_name?: string;
+  status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+  periods_count: number;
+  days_count: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ClassTimetableData {
+  timetable_id?: number;
+  org_id: number;
+  academic_year_id: number;
+  year_name?: string;
+  academic_set_id: number;
+  set_name: string;
+  class_id: number;
+  class_name: string;
+  section: string;
+  room_number?: string;
+  timetable_name?: string;
+  status: string;
+  periods: TimetablePeriod[];
+  today_schedule: TimetablePeriod[];
+}
+
 export interface TeacherAcademicAssignments {
   teacher_id: number;
   academic_year_id: number;

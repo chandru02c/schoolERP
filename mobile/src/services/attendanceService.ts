@@ -229,6 +229,167 @@ export const attendanceService = {
       return [];
     }
   },
+
+  /**
+   * Exception-based Parent Attendance Calculator.
+   * Logic:
+   * - Iterate from academic year start date up to current date.
+   * - If an absent record exists for a date, mark student as Absent.
+   * - If no attendance record exists for a valid school day, mark student as Present.
+   * - Sundays and configured school holidays are not counted as attendance days.
+   * - Returns complete attendance metrics and daily log.
+   */
+  calculateParentAttendance(options: {
+    startDate?: string | Date;
+    endDate?: string | Date;
+    absentRecords?: any[];
+    holidays?: any[];
+  }): CalculatedAttendanceResult {
+    const end = options.endDate ? new Date(options.endDate) : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    let start: Date;
+    if (options.startDate) {
+      start = new Date(options.startDate);
+    } else {
+      // Default to June 1st of current academic year
+      const currentYear = end.getMonth() >= 5 ? end.getFullYear() : end.getFullYear() - 1;
+      start = new Date(currentYear, 5, 1);
+    }
+
+    if (isNaN(start.getTime()) || start > end) {
+      start = new Date(end);
+      start.setDate(end.getDate() - 60);
+    }
+    start.setHours(0, 0, 0, 0);
+
+    // Map holidays: key YYYY-MM-DD -> holiday name
+    const holidayMap = new Map<string, string>();
+    (options.holidays || []).forEach((h: any) => {
+      const rawDate = h.holiday_date || h.date;
+      if (rawDate) {
+        const dStr = String(rawDate).split('T')[0];
+        holidayMap.set(dStr, h.holiday_name || h.name || 'School Holiday');
+      }
+    });
+
+    // Map absent records: key YYYY-MM-DD -> record
+    const absentMap = new Map<string, any>();
+    (options.absentRecords || []).forEach((r: any) => {
+      const rawDate = r.attendance_date || r.date;
+      if (rawDate) {
+        const dStr = String(rawDate).split('T')[0];
+        absentMap.set(dStr, r);
+      }
+    });
+
+    let totalWorkingDays = 0;
+    let presentDays = 0;
+    let absentDays = 0;
+    const dailyRecords: CalculatedDayAttendance[] = [];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    const curr = new Date(start);
+    while (curr <= end) {
+      const y = curr.getFullYear();
+      const m = String(curr.getMonth() + 1).padStart(2, '0');
+      const d = String(curr.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      const dayOfWeek = curr.getDay();
+      const dayName = dayNames[dayOfWeek];
+
+      if (dayOfWeek === 0) {
+        // Sundays are NOT counted as attendance days
+        dailyRecords.push({
+          date: dateStr,
+          dayName,
+          status: 'SUNDAY',
+          isSchoolDay: false,
+          remarks: 'Sunday',
+        });
+      } else if (holidayMap.has(dateStr)) {
+        // Configured school holidays are NOT counted as attendance days
+        const hName = holidayMap.get(dateStr) || 'School Holiday';
+        dailyRecords.push({
+          date: dateStr,
+          dayName,
+          status: 'HOLIDAY',
+          isSchoolDay: false,
+          holidayName: hName,
+          remarks: hName,
+        });
+      } else {
+        // Valid school day!
+        totalWorkingDays++;
+        const absentRec = absentMap.get(dateStr);
+        if (absentRec) {
+          // Absent record exists -> Absent
+          absentDays++;
+          dailyRecords.push({
+            date: dateStr,
+            dayName,
+            status: 'ABSENT',
+            morning_status: absentRec.morning_status || 'ABSENT',
+            afternoon_status: absentRec.afternoon_status || 'ABSENT',
+            isSchoolDay: true,
+            remarks: absentRec.remarks || 'Absent',
+          });
+        } else {
+          // No record on valid school day -> Exception-based PRESENT
+          presentDays++;
+          dailyRecords.push({
+            date: dateStr,
+            dayName,
+            status: 'PRESENT',
+            morning_status: 'PRESENT',
+            afternoon_status: 'PRESENT',
+            isSchoolDay: true,
+            remarks: 'Present',
+          });
+        }
+      }
+
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    // Sort newest first
+    dailyRecords.sort((a, b) => b.date.localeCompare(a.date));
+
+    const attendancePercentage = totalWorkingDays > 0
+      ? Number(((presentDays / totalWorkingDays) * 100).toFixed(1))
+      : 100.0;
+
+    return {
+      total_working_days: totalWorkingDays,
+      present_days: presentDays,
+      absent_days: absentDays,
+      attendance_percentage: attendancePercentage,
+      start_date: start.toISOString().split('T')[0],
+      end_date: end.toISOString().split('T')[0],
+      daily_records: dailyRecords,
+    };
+  },
 };
+
+export interface CalculatedDayAttendance {
+  date: string;
+  dayName: string;
+  status: 'PRESENT' | 'ABSENT' | 'HOLIDAY' | 'SUNDAY';
+  morning_status?: 'PRESENT' | 'ABSENT' | 'HOLIDAY';
+  afternoon_status?: 'PRESENT' | 'ABSENT' | 'HOLIDAY';
+  isSchoolDay: boolean;
+  remarks?: string;
+  holidayName?: string;
+}
+
+export interface CalculatedAttendanceResult {
+  total_working_days: number;
+  present_days: number;
+  absent_days: number;
+  attendance_percentage: number;
+  start_date: string;
+  end_date: string;
+  daily_records: CalculatedDayAttendance[];
+}
 
 export default attendanceService;

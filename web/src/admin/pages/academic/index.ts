@@ -5,3 +5,4 @@ export * from './TeacherAssignmentPage';
 export * from './StudentPromotionPage';
 export * from './AcademicCalendarPage';
 export * from './AcademicExamsPage';
+export * from './AcademicTimetablePage';

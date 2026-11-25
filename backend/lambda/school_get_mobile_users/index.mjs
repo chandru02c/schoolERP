@@ -81,6 +81,7 @@ export const handler = async (event) => {
                     c.email,
                     c.phone_number,
                     c.mapped_student_ids,
+                    c.profile_photo,
                     CASE
                         WHEN c.mapped_student_ids IS NOT NULL AND jsonb_typeof(c.mapped_student_ids) = 'array'
                         THEN jsonb_array_length(c.mapped_student_ids)
@@ -128,6 +129,9 @@ export const handler = async (event) => {
                     parent_name: r.parent_name,
                     email: r.email,
                     phone_number: r.phone_number,
+                    profile_photo: r.profile_photo || '',
+                    avatar: r.profile_photo || '',
+                    avatar_url: r.profile_photo || '',
                     mapped_student_ids: mappedIds,
                     mapped_student_count: Number(r.mapped_student_count || mappedIds.length || 0),
                     status: r.status,
@@ -269,6 +273,9 @@ export const handler = async (event) => {
                 mappedStudentIds = JSON.stringify(body.mapped_student_ids);
             }
 
+            const rawProfilePhoto = body.profile_photo !== undefined ? body.profile_photo : (body.avatar || body.avatar_url);
+            const profilePhoto = rawProfilePhoto !== undefined ? (String(rawProfilePhoto || '').trim() || null) : current.profile_photo;
+
             await dbExecute(
                 `UPDATE school.mobile_user_credentials
                  SET email = $1,
@@ -277,9 +284,10 @@ export const handler = async (event) => {
                      parent_name = $4,
                      mapped_student_ids = $5::jsonb,
                      password_hash = $6,
+                     profile_photo = $7,
                      updated_at = CURRENT_TIMESTAMP
-                 WHERE id = $7 AND org_id = $8;`,
-                [email, phoneNumber, status, parentName, mappedStudentIds, passwordHash, id, orgId]
+                 WHERE id = $8 AND org_id = $9;`,
+                [email, phoneNumber, status, parentName, mappedStudentIds, passwordHash, profilePhoto, id, orgId]
             );
 
             return respond(200, true, 'Mobile user credential updated successfully.');

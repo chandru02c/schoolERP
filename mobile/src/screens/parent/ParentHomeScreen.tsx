@@ -229,7 +229,8 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.switcherRow}>
               {childrenList.map((ch) => {
                 const isSelected = String(activeStudent?.student_id) === String(ch.student_id);
-                const photo = ch.avatar_url && ch.avatar_url.startsWith('http') ? ch.avatar_url : null;
+                const rawPhoto = ch.avatar_url || ch.student_photo;
+                const photo = rawPhoto && String(rawPhoto).startsWith('http') && !String(rawPhoto).includes('/NULL') ? String(rawPhoto) : null;
                 return (
                   <TouchableOpacity
                     key={String(ch.student_id)}
@@ -278,11 +279,14 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
           >
             <View style={styles.heroLeft}>
               <View style={styles.heroAvatarWrap}>
-                {activeStudent.avatar_url && activeStudent.avatar_url.startsWith('http') ? (
-                  <Image source={{ uri: activeStudent.avatar_url }} style={styles.heroAvatarImg} />
-                ) : (
-                  <Ionicons name="person" size={32} color={colors.primary} />
-                )}
+                {(() => {
+                  const heroPhoto = activeStudent.avatar_url || activeStudent.student_photo;
+                  return heroPhoto && String(heroPhoto).startsWith('http') && !String(heroPhoto).includes('/NULL') ? (
+                    <Image source={{ uri: String(heroPhoto) }} style={styles.heroAvatarImg} />
+                  ) : (
+                    <Ionicons name="person" size={32} color={colors.primary} />
+                  );
+                })()}
               </View>
               <View style={styles.heroInfo}>
                 <Text style={styles.heroStudentName}>{activeStudent.student_name}</Text>
@@ -390,6 +394,47 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                   <Text style={styles.periodClass}>{period.className} • Room {period.room}</Text>
                 </View>
                 <Text style={styles.periodTime}>{period.time.split('-')[0].trim()}</Text>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Upcoming School Events Widget */}
+        <View style={styles.sectionWrap}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="flag-outline" size={18} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={styles.sectionHeading}>Upcoming School Events</Text>
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => navigation.navigate('ParentEvents')}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {upcomingEvents.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="calendar-outline" size={30} color={colors.textMuted} />
+              <Text style={styles.emptyCardText}>No upcoming events scheduled.</Text>
+            </View>
+          ) : (
+            upcomingEvents.map((evt) => (
+              <View key={evt.id} style={styles.eventRowCard}>
+                <View style={styles.eventIconCircle}>
+                  <Ionicons name="calendar" size={20} color={colors.primary} />
+                </View>
+                <View style={styles.eventInfoCol}>
+                  <Text style={styles.eventTitle}>{evt.title || evt.event_name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 3 }}>
+                    <Ionicons name="calendar-outline" size={13} color={colors.primary} style={{ marginRight: 4 }} />
+                    <Text style={styles.eventDateText}>{evt.event_date || evt.date}</Text>
+                    <Ionicons name="time-outline" size={13} color={colors.textSecondary} style={{ marginLeft: 10, marginRight: 4 }} />
+                    <Text style={styles.eventDateText}>{evt.time || '09:00 AM - 04:00 PM'}</Text>
+                  </View>
+                  <Text style={styles.eventDescText} numberOfLines={2}>
+                    {evt.description || 'School campus event'}
+                  </Text>
+                </View>
               </View>
             ))
           )}
@@ -703,6 +748,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     marginTop: 6,
+  },
+  eventRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  eventIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  eventInfoCol: {
+    flex: 1,
+  },
+  eventTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.dark,
+  },
+  eventDateText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  eventDescText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 16,
   },
 });
 

@@ -26,12 +26,17 @@ import {
   Save as SaveIcon,
   School as AcademicIcon,
   Person as PersonIcon,
+  PhotoCamera as CameraIcon,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
+import toast from 'react-hot-toast';
 
 import { AppDispatch, RootState } from '../../redux/store';
 import { fetchStudentById, updateStudent } from '../../redux/slices/studentSlice';
+import { documentApi } from '../../api/documentApi';
+import { sessionService } from '../../utils/sessionService';
+import { DEFAULT_ORG_ID } from '../../constants';
 import {
   ROUTES,
   ADMISSION_CLASSES,
@@ -60,6 +65,60 @@ const EditStudentPage: React.FC = () => {
   });
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [photoUrl, setPhotoUrl] = useState<string>('');
+  const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
+
+  const orgId = Number(sessionService.getOrgId() || DEFAULT_ORG_ID || 1001);
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!file || !id) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Student photo must be less than 5MB.');
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      const presigned = await documentApi.getPresignedUrl({
+        org_id: orgId,
+        module: 'STUDENT',
+        entity_id: Number(id),
+        file_name: file.name,
+        content_type: file.type || 'image/jpeg',
+      });
+
+      let finalUrl = '';
+      if (presigned?.data?.uploadUrl) {
+        await documentApi.uploadToS3(presigned.data.uploadUrl, file);
+        finalUrl = presigned.data.fileUrl || presigned.data.s3Key;
+      } else {
+        finalUrl = await new Promise<string>((resolve) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result as string);
+          r.readAsDataURL(file);
+        });
+      }
+
+      setPhotoUrl(finalUrl);
+      setFormData((prev) => ({ ...prev, student_photo: finalUrl } as any));
+      await dispatch(updateStudent({ id: Number(id), payload: { ...formData, student_photo: finalUrl } as any }));
+      dispatch(fetchStudentById(Number(id)));
+      toast.success('Student profile photo updated successfully.');
+    } catch (err: any) {
+      console.warn('Presigned upload fallback to data URL:', err);
+      const dataUrl = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.readAsDataURL(file);
+      });
+      setPhotoUrl(dataUrl);
+      setFormData((prev) => ({ ...prev, student_photo: dataUrl } as any));
+      await dispatch(updateStudent({ id: Number(id), payload: { ...formData, student_photo: dataUrl } as any }));
+      dispatch(fetchStudentById(Number(id)));
+      toast.success('Student photo updated.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -184,21 +243,42 @@ const EditStudentPage: React.FC = () => {
         <strong>Immutable Master Record:</strong> Student personal details (Name, DOB, Gender, Parents, Address, Aadhaar) are permanently linked to <strong>Admission Application #{student.application_no}</strong>. Only classroom assignments and academic parameters are editable here.
       </Alert>
 
-      {/* Read-Only Profile Identity Banner */}
+      {/* Read-Only Profile Identity Banner with Photo Management */}
       <Card sx={{ p: 3, mb: 3, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', bgcolor: '#F8FAFC' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, flexWrap: 'wrap' }}>
-          <Avatar
-            src={student.student_photo}
-            sx={{
-              width: 64,
-              height: 64,
-              fontSize: '1.5rem',
-              fontWeight: 800,
-              background: 'linear-gradient(135deg, #1976D2, #0D47A1)',
-            }}
-          >
-            {fullName[0]}
-          </Avatar>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+            <Avatar
+              src={photoUrl || student.student_photo}
+              sx={{
+                width: 72,
+                height: 72,
+                fontSize: '1.75rem',
+                fontWeight: 800,
+                background: 'linear-gradient(135deg, #1976D2, #0D47A1)',
+              }}
+            >
+              {fullName[0]}
+            </Avatar>
+            <Button
+              variant="outlined"
+              component="label"
+              size="small"
+              startIcon={uploadingPhoto ? <CircularProgress size={12} /> : <CameraIcon />}
+              disabled={uploadingPhoto}
+              sx={{ fontSize: '0.75rem', py: 0.25, px: 1, borderRadius: 2 }}
+            >
+              {uploadingPhoto ? 'Uploading...' : 'Change Photo'}
+              <input
+                type="file"
+                hidden
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handlePhotoUpload(file);
+                }}
+              />
+            </Button>
+          </Box>
           <Box sx={{ flex: 1 }}>
             <Typography variant="h6" fontWeight={800}>
               {fullName}

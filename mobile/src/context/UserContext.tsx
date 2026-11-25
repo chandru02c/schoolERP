@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from './AuthContext';
 import { teacherService, AssignedClassItem as TeacherClassItem } from '../services/teacherService';
 import { studentService, StudentMasterItem } from '../services/studentService';
+import { api } from '../services/api';
 import storage from '../storage';
 
 export interface StudentChild {
@@ -243,14 +244,30 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const uri = result.assets[0].uri;
-        updateUserProfile({ avatar_url: uri, avatar: uri });
+        updateUserProfile({ avatar_url: uri, avatar: uri, profile_photo: uri });
+
+        // Persist to backend /mobile-user/update
+        try {
+          const orgId = user?.org_id || 1001;
+          const userId = user?.id;
+          if (userId) {
+            await api.put('/mobile-user/update', {
+              id: Number(userId),
+              org_id: Number(orgId),
+              profile_photo: uri,
+            });
+          }
+        } catch (apiErr) {
+          console.warn('[UserContext] Failed to persist profile photo to backend:', apiErr);
+        }
+
         return uri;
       }
     } catch (err) {
       console.warn('[UserContext] pickProfileImage error:', err);
     }
     return null;
-  }, [updateUserProfile]);
+  }, [updateUserProfile, user?.id, user?.org_id]);
 
   const updateProfileDetails = useCallback(
     (details: Record<string, any>) => {

@@ -221,8 +221,10 @@ export const TeacherCalendarScreen: React.FC<{ navigation: any }> = ({ navigatio
                     </View>
                   </View>
                   <View style={styles.metaRow}>
-                    <Ionicons name="time-outline" size={14} color={colors.textSecondary} style={{ marginRight: 4 }} />
+                    <Ionicons name="calendar-outline" size={14} color={colors.primary} style={{ marginRight: 4 }} />
                     <Text style={styles.eventDate}>{ev.date}</Text>
+                    <Ionicons name="time-outline" size={14} color={colors.textSecondary} style={{ marginLeft: 12, marginRight: 4 }} />
+                    <Text style={styles.eventDate}>{ev.time || '09:00 AM - 04:00 PM'}</Text>
                   </View>
                   <Text style={styles.eventDesc}>{ev.description}</Text>
                 </View>

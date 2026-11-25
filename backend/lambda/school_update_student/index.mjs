@@ -138,6 +138,23 @@ export const handler = async (event) => {
                 ? await updateStatus(studentId, orgId, body, userId)
                 : await updateStudent(studentId, orgId, body, userId);
 
+            // If a profile photo was provided, ensure admission_application.student_photo is updated
+            const photoUrl = body.student_photo || body.photo || body.avatar || body.avatar_url;
+            if (photoUrl && (!result || result.success !== false)) {
+                try {
+                    await dbExecute(
+                        `UPDATE school.admission_application
+                         SET student_photo = $1, updated_at = CURRENT_TIMESTAMP
+                         WHERE id = (SELECT admission_id FROM school.student_master WHERE student_id = $2 AND org_id = $3)
+                           AND org_id = $3;`,
+                        [photoUrl, studentId, orgId],
+                        orgId
+                    );
+                } catch (photoErr) {
+                    console.warn('[school_update_student] Photo update warning:', photoErr.message);
+                }
+            }
+
             if (!result?.success) {
                 return respond(400, false,
                     result?.message || 'Failed to update student record.',

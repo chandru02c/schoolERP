@@ -20,17 +20,56 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { studentService, StudentMasterItem } from '../../services/studentService';
 import { useAcademic } from '../../context/AcademicContext';
+import { useUser } from '../../context/UserContext';
 import { OrganizationHeader } from '../../components/OrganizationHeader';
 import { colors } from '../../theme';
 import { useBackToHome } from '../../hooks/useBackToHome';
 
 export const TeacherStudentListScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const goHome = useBackToHome(navigation, 'Teacher');
-  const { selectedSet } = useAcademic();
+  const { assignedSets, selectedSet, setSelectedSet } = useAcademic();
+  const { assignedClasses } = useUser();
+
+  // Consolidate available classes from academic sets or teacher classes
+  const availableClasses = useMemo(() => {
+    const list: Array<{ id: string | number; name: string; section?: string }> = [];
+
+    if (assignedSets && assignedSets.length > 0) {
+      assignedSets.forEach((s) => {
+        list.push({
+          id: s.class_id,
+          name: s.class_name || `Class ${s.class_id}`,
+          section: s.section,
+        });
+      });
+    } else if (assignedClasses && assignedClasses.length > 0) {
+      assignedClasses.forEach((c) => {
+        list.push({
+          id: c.class_id,
+          name: c.class_name || `Class ${c.class_id}`,
+          section: c.section,
+        });
+      });
+    }
+
+    if (list.length === 0) {
+      // Default classes fallback
+      ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'].forEach((cn, i) => {
+        list.push({ id: String(i + 1), name: cn, section: 'A' });
+      });
+    }
+
+    return list;
+  }, [assignedSets, assignedClasses]);
+
+  const [selectedClassId, setSelectedClassId] = useState<string | number>(
+    selectedSet?.class_id || availableClasses[0]?.id || '10'
+  );
 
   const [students, setStudents] = useState<StudentMasterItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,8 +77,10 @@ export const TeacherStudentListScreen: React.FC<{ navigation: any }> = ({ naviga
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
   const loadStudents = useCallback(async () => {
+    setIsLoading(true);
     try {
       const res = await studentService.getStudents({
+        class_id: selectedClassId,
         limit: 100,
       });
       setStudents(res.data);
@@ -49,7 +90,7 @@ export const TeacherStudentListScreen: React.FC<{ navigation: any }> = ({ naviga
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [selectedClassId]);
 
   useEffect(() => {
     loadStudents();
@@ -60,17 +101,25 @@ export const TeacherStudentListScreen: React.FC<{ navigation: any }> = ({ naviga
     loadStudents();
   };
 
+  // Strictly filter students belonging to the selected class
   const filteredStudents = useMemo(() => {
-    if (!searchQuery.trim()) return students;
+    let list = students.filter((s) => {
+      if (!selectedClassId) return true;
+      const sClass = String(s.class_id || '').toLowerCase().replace('class', '').trim();
+      const selClass = String(selectedClassId).toLowerCase().replace('class', '').trim();
+      return sClass === selClass || String(s.class_id) === String(selectedClassId);
+    });
+
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return students.filter((s) => {
+    return list.filter((s) => {
       const name = (s.student_full_name || '').toLowerCase();
       const code = (s.student_code || s.registration_no || s.application_no || '').toLowerCase();
       const roll = (s.roll_no || '').toString();
       const father = (s.father_name || '').toLowerCase();
       return name.includes(q) || code.includes(q) || roll.includes(q) || father.includes(q);
     });
-  }, [students, searchQuery]);
+  }, [students, selectedClassId, searchQuery]);
 
   return (
     <View style={styles.container}>
@@ -81,6 +130,36 @@ export const TeacherStudentListScreen: React.FC<{ navigation: any }> = ({ naviga
         onNotificationPress={() => navigation.navigate('TeacherNotifications')}
         onProfilePress={() => navigation.navigate('TeacherProfile')}
       />
+
+      {/* Class Selection Chips Bar */}
+      <View style={styles.classSelectorWrap}>
+        <Text style={styles.classSelectorLabel}>Select Class:</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.classChipsScroll}
+        >
+          {availableClasses.map((item) => {
+            const isSelected = String(selectedClassId) === String(item.id);
+            return (
+              <TouchableOpacity
+                key={`${item.id}-${item.section || ''}`}
+                style={[styles.classChip, isSelected && styles.classChipActive]}
+                onPress={() => {
+                  setSelectedClassId(item.id);
+                  const matchingSet = assignedSets.find((s) => String(s.class_id) === String(item.id));
+                  if (matchingSet) setSelectedSet(matchingSet);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.classChipText, isSelected && styles.classChipTextActive]}>
+                  {item.name} {item.section ? `(${item.section})` : ''}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {/* Search Input Bar */}
       <View style={styles.searchRow}>
@@ -186,9 +265,48 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  classSelectorWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  classSelectorLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  classChipsScroll: {
+    paddingRight: 16,
+    gap: 8,
+  },
+  classChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: 6,
+  },
+  classChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  classChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textDark,
+  },
+  classChipTextActive: {
+    color: colors.white,
+    fontWeight: '700',
+  },
   searchRow: {
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 8,
   },
   searchBox: {
     flexDirection: 'row',

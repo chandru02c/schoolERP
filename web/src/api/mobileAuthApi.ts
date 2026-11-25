@@ -19,6 +19,9 @@ export interface MobileUserCredential {
   teacher_id: number | null;
   full_name: string;
   parent_name?: string;
+  profile_photo?: string;
+  avatar_url?: string;
+  avatar?: string;
   email: string;
   phone_number: string;
   mapped_student_ids?: number[];
@@ -46,6 +49,7 @@ export interface CreateParentPayload {
   phone_number: string;
   password: string;
   mapped_student_ids: number[];
+  profile_photo?: string;
 }
 
 export interface UpdateMobileUserPayload {
@@ -57,6 +61,7 @@ export interface UpdateMobileUserPayload {
   password?: string;
   parent_name?: string;
   mapped_student_ids?: number[];
+  profile_photo?: string;
 }
 
 export interface ResetPasswordPayload {
@@ -236,6 +241,7 @@ export const mobileAuthApi = {
     phone_number: string;
     password: string;
     mapped_student_ids: number[];
+    profile_photo?: string;
   }): Promise<ApiResponse<MobileUserCredential>> {
     return this.createMobileUser({
       ...data,

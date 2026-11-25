@@ -29,7 +29,7 @@ import { useBackToHome } from '../../hooks/useBackToHome';
 export const ParentProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const goHome = useBackToHome(navigation, 'Parent');
   const { user, logout } = useAuth();
-  const { childrenList, setSelectedChild } = useUser();
+  const { childrenList, setSelectedChild, pickProfileImage } = useUser();
 
   const parent = user as ParentUser;
 
@@ -74,11 +74,25 @@ export const ParentProfileScreen: React.FC<{ navigation: any }> = ({ navigation 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Parent Details Card */}
         <View style={styles.parentCard}>
-          <Image
-            source={{ uri: parent?.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150' }}
-            style={styles.parentAvatar}
-          />
-          <Text style={styles.parentName}>{parent?.name || 'Primary Guardian'}</Text>
+          <View style={styles.avatarWrap}>
+            <Image
+              source={{ uri: parent?.profile_photo || parent?.avatar_url || parent?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150' }}
+              style={styles.parentAvatar}
+            />
+            <TouchableOpacity
+              style={styles.avatarEditBadge}
+              onPress={async () => {
+                const uri = await pickProfileImage();
+                if (uri) {
+                  Alert.alert('Profile Photo Updated', 'Your profile image has been updated successfully.');
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="camera" size={16} color={colors.white} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.parentName}>{parent?.name || parent?.parent_name || 'Primary Guardian'}</Text>
           <View style={styles.roleBadge}>
             <Text style={styles.roleBadgeText}>Parent / Guardian Account</Text>
           </View>
@@ -199,7 +213,28 @@ const styles = StyleSheet.create({
     borderRadius: 42,
     borderWidth: 3,
     borderColor: colors.borderLight,
+  },
+  avatarWrap: {
+    position: 'relative',
     marginBottom: 12,
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: colors.primary,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   parentName: {
     fontSize: 18,

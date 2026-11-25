@@ -106,6 +106,33 @@ async function generateTeacherDocumentUrl(orgId, teacherId, fileName, contentTyp
     };
 }
 
+/**
+ * Generate S3 Pre-Signed URL for Parent Document / Profile Photo
+ * Path: school-data/{org_id}/parent/{parent_id}/{filename}
+ */
+async function generateParentDocumentUrl(orgId, parentId, fileName, contentType) {
+    const sanitizedFileName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const s3Key = `school-data/${orgId}/parent/${parentId}/${sanitizedFileName}`;
+
+    const command = new PutObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: s3Key,
+        ContentType: contentType
+    });
+
+    const uploadUrl = await getSignedUrl(s3Client, command, {
+        expiresIn: PRESIGNED_EXPIRY_SECONDS
+    });
+
+    return {
+        uploadUrl,
+        bucket: S3_BUCKET,
+        s3Key,
+        fileUrl: `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${s3Key}`,
+        expiresInSeconds: PRESIGNED_EXPIRY_SECONDS
+    };
+}
+
 export const handler = async (event) => {
     const method = (
         event.httpMethod ||
@@ -143,12 +170,12 @@ export const handler = async (event) => {
         return respond(400, false, 'org_id is mandatory in headers or request body.');
     }
 
-    if (!moduleType || !['ADMISSION', 'TEACHER'].includes(moduleType)) {
-        return respond(400, false, 'module parameter is required and must be either ADMISSION or TEACHER.');
+    if (!moduleType || !['ADMISSION', 'TEACHER', 'STUDENT', 'PARENT'].includes(moduleType)) {
+        return respond(400, false, 'module parameter is required and must be ADMISSION, TEACHER, STUDENT, or PARENT.');
     }
 
     if (!entityId) {
-        return respond(400, false, 'entity_id (admission_id or teacher_id) is mandatory in request body.');
+        return respond(400, false, 'entity_id (admission_id, student_id, teacher_id, or parent_id) is mandatory in request body.');
     }
 
     if (!fileName) {
@@ -168,10 +195,12 @@ export const handler = async (event) => {
 
     try {
         let result;
-        if (moduleType === 'ADMISSION') {
+        if (moduleType === 'ADMISSION' || moduleType === 'STUDENT') {
             result = await generateAdmissionDocumentUrl(orgId, entityId, fileName, contentType || 'application/pdf');
         } else if (moduleType === 'TEACHER') {
             result = await generateTeacherDocumentUrl(orgId, entityId, fileName, contentType || 'application/pdf');
+        } else if (moduleType === 'PARENT') {
+            result = await generateParentDocumentUrl(orgId, entityId, fileName, contentType || 'application/pdf');
         }
 
         return respond(200, true, 'Pre-Signed Upload URL generated successfully.', result);

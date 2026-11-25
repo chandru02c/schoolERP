@@ -235,9 +235,12 @@ export const ParentCalendarScreen: React.FC<{ navigation: any }> = ({ navigation
                       </View>
                     </View>
 
-                    <Text style={styles.eventDateText}>
-                      <Ionicons name="calendar" size={12} color={colors.textSecondary} /> {ev.date}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, marginBottom: 4 }}>
+                      <Ionicons name="calendar-outline" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+                      <Text style={styles.eventDateText}>{ev.date}</Text>
+                      <Ionicons name="time-outline" size={12} color={colors.textSecondary} style={{ marginLeft: 10, marginRight: 4 }} />
+                      <Text style={styles.eventDateText}>{ev.time || '09:00 AM - 04:00 PM'}</Text>
+                    </View>
 
                     {ev.description ? (
                       <Text style={styles.eventDescription} numberOfLines={2}>

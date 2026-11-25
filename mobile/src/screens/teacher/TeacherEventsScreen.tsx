@@ -57,12 +57,16 @@ export const TeacherEventsScreen = ({ navigation }: any) => {
 
   const filteredEvents = useMemo(() => {
     if (activeFilter === 'UPCOMING') {
-      return events.filter((e) => (e.event_date || e.start_date || '') >= todayStr);
+      return events
+        .filter((e) => (e.event_date || e.date || e.start_date || '') >= todayStr)
+        .sort((a, b) => (a.event_date || a.date || '').localeCompare(b.event_date || b.date || ''));
     }
     if (activeFilter === 'PAST') {
-      return events.filter((e) => (e.event_date || e.start_date || '') < todayStr);
+      return events
+        .filter((e) => (e.event_date || e.date || e.start_date || '') < todayStr)
+        .sort((a, b) => (b.event_date || b.date || '').localeCompare(a.event_date || a.date || ''));
     }
-    return events;
+    return [...events].sort((a, b) => (a.event_date || a.date || '').localeCompare(b.event_date || b.date || ''));
   }, [events, activeFilter, todayStr]);
 
   return (
@@ -131,7 +135,10 @@ export const TeacherEventsScreen = ({ navigation }: any) => {
 
                   <View style={styles.metaRow}>
                     <Ionicons name="calendar-outline" size={14} color={colors.primary} style={{ marginRight: 4 }} />
-                    <Text style={styles.metaText}>{item.event_date || item.start_date || 'TBA'}</Text>
+                    <Text style={styles.metaText}>{item.event_date || item.date || item.start_date || 'TBA'}</Text>
+
+                    <Ionicons name="time-outline" size={14} color={colors.textSecondary} style={{ marginLeft: 12, marginRight: 4 }} />
+                    <Text style={styles.metaText}>{item.time || '09:00 AM - 04:00 PM'}</Text>
 
                     {item.location && (
                       <>

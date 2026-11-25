@@ -38,7 +38,7 @@ export const StudentProfileScreen = ({ navigation }: any) => {
         {/* Profile Card */}
         <CustomCard style={styles.avatarCard}>
           <Avatar
-            uri={student?.avatar_url || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150'}
+            uri={student?.student_photo || student?.avatar_url || (student as any)?.avatar || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150'}
             name={student?.name || 'Aarav Sharma'}
             size={88}
           />

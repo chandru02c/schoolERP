@@ -420,7 +420,27 @@ ELSIF v_action = 'GET_CLASS_REPORT' THEN
                       AND (v_end_date IS NULL OR ah.attendance_date <= v_end_date)
                       AND ad.is_deleted = FALSE
                 ),
-                'afternoon_leave_days', 0
+                'afternoon_leave_days', 0,
+                'absent_records', COALESCE((
+                    SELECT jsonb_agg(
+                        jsonb_build_object(
+                            'attendance_date', ah.attendance_date,
+                            'morning_status', ad.morning_status,
+                            'afternoon_status', ad.afternoon_status,
+                            'status', 'ABSENT',
+                            'remarks', ad.remarks
+                        ) ORDER BY ah.attendance_date DESC
+                    )
+                    FROM school.attendance_details ad
+                    JOIN school.attendance_header ah ON ah.id = ad.attendance_header_id
+                    WHERE ad.org_id = p_org_id 
+                      AND ad.student_id = s.student_id 
+                      AND (ad.status_id = 2 OR ad.morning_status = 'ABSENT' OR ad.afternoon_status = 'ABSENT')
+                      AND (v_academic_id IS NULL OR ah.academic_id = v_academic_id)
+                      AND (v_start_date IS NULL OR ah.attendance_date >= v_start_date)
+                      AND (v_end_date IS NULL OR ah.attendance_date <= v_end_date)
+                      AND ad.is_deleted = FALSE
+                ), '[]'::jsonb)
             ) ORDER BY COALESCE(e.roll_number, s.roll_no, ''), a.student_first_name ASC
         ), '[]'::jsonb) INTO v_student_report
         FROM school.student_master s

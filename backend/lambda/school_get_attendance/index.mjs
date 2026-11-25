@@ -160,6 +160,28 @@ export const handler = async (event) => {
             }
         }
 
+        // Enrich student report with active academic year and configured holidays for parent calculation
+        if (action === 'GET_STUDENT_REPORT') {
+            try {
+                if (!activeYear) {
+                    activeYear = await getActiveAcademicYear(dbExecute, orgId);
+                }
+                if (activeYear) {
+                    result.academic_year = activeYear;
+                }
+                const holidayRows = await dbQuery(
+                    `SELECT id, holiday_name, holiday_type, holiday_date, description
+                     FROM school.holiday_master
+                     WHERE org_id = $1 AND is_deleted = FALSE
+                     ORDER BY holiday_date ASC;`,
+                    [orgId]
+                );
+                result.holidays = Array.isArray(holidayRows) ? holidayRows : (holidayRows?.holidays || []);
+            } catch (extraErr) {
+                console.warn('[school_get_attendance] Extra metadata warning:', extraErr.message);
+            }
+        }
+
         const isSuccess = result.success !== false;
         return respond(isSuccess ? 200 : 400, isSuccess, result.message || 'Data retrieved successfully.', result);
     } catch (err) {

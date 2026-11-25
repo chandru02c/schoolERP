@@ -20,6 +20,8 @@ import {
   Paper,
   Alert,
   Skeleton,
+  Avatar,
+  CircularProgress,
 } from '@mui/material';
 import {
   Save as SaveIcon,
@@ -32,12 +34,17 @@ import {
   DirectionsBus as FacilityIcon,
   LocalHospital as MedicalIcon,
   Notes as RemarksIcon,
+  PhotoCamera as CameraIcon,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
+import toast from 'react-hot-toast';
 
 import { AppDispatch, RootState } from '../../redux/store';
 import { fetchAdmissionById, updateAdmission } from '../../redux/slices/admissionSlice';
+import { documentApi } from '../../api/documentApi';
+import { sessionService } from '../../utils/sessionService';
+import { DEFAULT_ORG_ID } from '../../constants';
 import {
   ROUTES,
   ACADEMIC_YEARS,
@@ -73,6 +80,54 @@ const EditAdmissionPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [formData, setFormData] = useState<Partial<AdmissionApplication>>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const orgId = Number(sessionService.getOrgId() || DEFAULT_ORG_ID || 1001);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Student photo must be less than 5MB.');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const presigned = await documentApi.getPresignedUrl({
+        org_id: orgId,
+        module: 'STUDENT',
+        entity_id: appId || 1,
+        file_name: file.name,
+        content_type: file.type || 'image/jpeg',
+      });
+
+      let finalUrl = '';
+      if (presigned?.data?.uploadUrl) {
+        await documentApi.uploadToS3(presigned.data.uploadUrl, file);
+        finalUrl = presigned.data.fileUrl || presigned.data.s3Key;
+      } else {
+        finalUrl = await new Promise<string>((resolve) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result as string);
+          r.readAsDataURL(file);
+        });
+      }
+
+      handleChange('student_photo', finalUrl);
+      toast.success('Student photo uploaded successfully.');
+    } catch (err: any) {
+      console.warn('Presigned upload fallback to data URL:', err);
+      const dataUrl = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.readAsDataURL(file);
+      });
+      handleChange('student_photo', dataUrl);
+      toast.success('Student photo selected.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   useEffect(() => {
     if (appId) {
@@ -377,12 +432,44 @@ const EditAdmissionPage: React.FC = () => {
               />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Student Photo URL"
-                value={formData.student_photo || ''}
-                onChange={(e) => handleChange('student_photo', e.target.value)}
-              />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Avatar
+                  src={formData.student_photo}
+                  sx={{ width: 48, height: 48, bgcolor: 'primary.light', fontWeight: 700 }}
+                >
+                  {formData.student_first_name ? formData.student_first_name[0].toUpperCase() : 'S'}
+                </Avatar>
+                <Box>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    size="small"
+                    startIcon={uploadingPhoto ? <CircularProgress size={14} /> : <CameraIcon />}
+                    disabled={uploadingPhoto}
+                  >
+                    {uploadingPhoto ? 'Uploading...' : 'Upload Student Photo'}
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                    />
+                  </Button>
+                  {formData.student_photo ? (
+                    <Button
+                      size="small"
+                      color="error"
+                      sx={{ ml: 1 }}
+                      onClick={() => handleChange('student_photo', '')}
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    PNG, JPG or WEBP (Max 5MB)
+                  </Typography>
+                </Box>
+              </Box>
             </Grid>
           </Grid>
         </TabPanel>

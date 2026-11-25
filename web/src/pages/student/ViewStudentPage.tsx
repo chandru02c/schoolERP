@@ -41,17 +41,22 @@ import {
   SwapHoriz as StatusIcon,
   CheckCircle as VerifiedIcon,
   Cancel as UnverifiedIcon,
+  PhotoCamera as CameraIcon,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
+import toast from 'react-hot-toast';
 
 import { AppDispatch, RootState } from '../../redux/store';
 import {
   fetchStudentById,
   deleteStudent,
   updateStudentStatus,
+  updateStudent,
 } from '../../redux/slices/studentSlice';
-import { ROUTES, STUDENT_STATUS_COLORS } from '../../constants';
+import { ROUTES, STUDENT_STATUS_COLORS, DEFAULT_ORG_ID } from '../../constants';
+import { documentApi } from '../../api/documentApi';
+import { sessionService } from '../../utils/sessionService';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 
 interface TabPanelProps {
@@ -74,6 +79,54 @@ const ViewStudentPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState(0);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const orgId = Number(sessionService.getOrgId() || DEFAULT_ORG_ID || 1001);
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!file || !id) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Student photo must be less than 5MB.');
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      const presigned = await documentApi.getPresignedUrl({
+        org_id: orgId,
+        module: 'STUDENT',
+        entity_id: Number(id),
+        file_name: file.name,
+        content_type: file.type || 'image/jpeg',
+      });
+
+      let finalUrl = '';
+      if (presigned?.data?.uploadUrl) {
+        await documentApi.uploadToS3(presigned.data.uploadUrl, file);
+        finalUrl = presigned.data.fileUrl || presigned.data.s3Key;
+      } else {
+        finalUrl = await new Promise<string>((resolve) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result as string);
+          r.readAsDataURL(file);
+        });
+      }
+
+      await dispatch(updateStudent({ id: Number(id), payload: { student_photo: finalUrl } as any }));
+      dispatch(fetchStudentById(Number(id)));
+      toast.success('Student profile photo updated successfully.');
+    } catch (err: any) {
+      console.warn('Presigned upload fallback to data URL:', err);
+      const dataUrl = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.readAsDataURL(file);
+      });
+      await dispatch(updateStudent({ id: Number(id), payload: { student_photo: dataUrl } as any }));
+      dispatch(fetchStudentById(Number(id)));
+      toast.success('Student photo updated.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -196,20 +249,52 @@ const ViewStudentPage: React.FC = () => {
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 3, textAlign: { xs: 'center', sm: 'left' } }}>
-              <Avatar
-                src={student.student_photo?.startsWith('http') ? student.student_photo : (student.student_photo ? `https://school-erp-documents-prod.s3.ap-south-1.amazonaws.com/${student.student_photo}` : undefined)}
-                sx={{
-                  width: 96,
-                  height: 96,
-                  border: '4px solid #fff',
-                  boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
-                  background: 'linear-gradient(135deg, #1976D2, #0D47A1)',
-                  fontSize: '2.5rem',
-                  fontWeight: 800,
-                }}
-              >
-                {fullName[0]}
-              </Avatar>
+              <Box sx={{ position: 'relative' }}>
+                <Avatar
+                  src={student.student_photo?.startsWith('http') ? student.student_photo : (student.student_photo ? `https://school-erp-documents-prod.s3.ap-south-1.amazonaws.com/${student.student_photo}` : undefined)}
+                  sx={{
+                    width: 96,
+                    height: 96,
+                    border: '4px solid #fff',
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+                    background: 'linear-gradient(135deg, #1976D2, #0D47A1)',
+                    fontSize: '2.5rem',
+                    fontWeight: 800,
+                  }}
+                >
+                  {fullName[0]}
+                </Avatar>
+                <Button
+                  variant="contained"
+                  component="label"
+                  size="small"
+                  disabled={uploadingPhoto}
+                  sx={{
+                    position: 'absolute',
+                    bottom: -6,
+                    right: -6,
+                    minWidth: 32,
+                    width: 32,
+                    height: 32,
+                    p: 0,
+                    borderRadius: '50%',
+                    bgcolor: 'primary.main',
+                    boxShadow: 2,
+                    '&:hover': { bgcolor: 'primary.dark' },
+                  }}
+                >
+                  {uploadingPhoto ? <CircularProgress size={16} sx={{ color: 'white' }} /> : <CameraIcon sx={{ fontSize: 18 }} />}
+                  <input
+                    type="file"
+                    hidden
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handlePhotoUpload(file);
+                    }}
+                  />
+                </Button>
+              </Box>
               <Box sx={{ mb: 1 }}>
                 <Typography variant="h5" fontWeight={800} color="text.primary">
                   {fullName}

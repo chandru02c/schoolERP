@@ -3,7 +3,7 @@
  * Description: TypeScript interfaces and type definitions for Document Upload functionality.
  */
 
-export type DocumentModule = 'ADMISSION' | 'TEACHER';
+export type DocumentModule = 'ADMISSION' | 'TEACHER' | 'STUDENT' | 'PARENT';
 
 export type AdmissionDocumentType =
   | 'Student Photo'

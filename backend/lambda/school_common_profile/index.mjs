@@ -162,7 +162,7 @@ export const handler = async (event) => {
             if (!rows || rows.length === 0) {
                 // Fallback check against mobile credentials
                 const credRows = await dbExecute(
-                    `SELECT id, teacher_id, email, phone_number, full_name 
+                    `SELECT id, teacher_id, email, phone_number, full_name, profile_photo 
                      FROM school.mobile_user_credentials 
                      WHERE org_id = $1 AND (id = $2::BIGINT OR teacher_id = $2::BIGINT OR LOWER(email) = LOWER($3) OR phone_number = $3)
                      LIMIT 1;`,
@@ -174,7 +174,7 @@ export const handler = async (event) => {
                     const tId = c.teacher_id || c.id;
 
                     // Check if profile photo uploaded
-                    let photoUrl = '';
+                    let photoUrl = c.profile_photo || '';
                     try {
                         const photoRows = await dbExecute(
                             `SELECT s3_key FROM school.teacher_document
@@ -234,6 +234,20 @@ export const handler = async (event) => {
                 }
             } catch {}
 
+            if (!photoUrl) {
+                try {
+                    const credPhotos = await dbExecute(
+                        `SELECT profile_photo FROM school.mobile_user_credentials 
+                         WHERE org_id = $1 AND (teacher_id = $2::BIGINT OR id = $2::BIGINT) AND profile_photo IS NOT NULL 
+                         LIMIT 1;`,
+                        [orgId, t.teacher_id]
+                    );
+                    if (credPhotos && credPhotos.length > 0 && credPhotos[0].profile_photo) {
+                        photoUrl = credPhotos[0].profile_photo;
+                    }
+                } catch {}
+            }
+
             const teacherAddress = [t.address_line_1, t.address_line_2].filter(Boolean).join(', ') || '';
 
             const teacherProfile = {
@@ -292,7 +306,7 @@ export const handler = async (event) => {
         if (rawUserType === 'parent') {
             const numericId = !isNaN(Number(userId)) ? Number(userId) : 0;
             const credRows = await dbExecute(
-                `SELECT id, org_id, user_type, parent_name, email, phone_number, mapped_student_ids, status
+                `SELECT id, org_id, user_type, parent_name, email, phone_number, mapped_student_ids, status, profile_photo
                  FROM school.mobile_user_credentials
                  WHERE org_id = $1
                    AND (
@@ -446,6 +460,9 @@ export const handler = async (event) => {
                 email: p.email,
                 phone: p.phone_number,
                 phone_number: p.phone_number,
+                avatar: p.profile_photo || '',
+                avatar_url: p.profile_photo || '',
+                profile_photo: p.profile_photo || '',
                 relationship: 'Guardian',
                 address: 'Bangalore, India',
                 org_id: orgId,

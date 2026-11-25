@@ -537,6 +537,35 @@ export const teacherApiService = {
 
   // ── Timetable ──
   getTimetable: async (): Promise<TimetableSlot[]> => {
+    try {
+      const orgId = getOrgId();
+      const state = store.getState();
+      const teacherId = sessionService.getTeacherId() || (state.auth.user as any)?.teacher_id || (state.auth.user as any)?.teacherId || (state.auth.user as any)?.id || 1;
+      const res = await apiClient.get<any>('/academic', {
+        params: {
+          action: 'GET_TEACHER_TIMETABLE',
+          org_id: orgId,
+          teacher_id: teacherId,
+        },
+        headers: { org_id: String(orgId) },
+      });
+
+      if (res.data?.success && res.data.data?.weekly_schedule && Array.isArray(res.data.data.weekly_schedule) && res.data.data.weekly_schedule.length > 0) {
+        return res.data.data.weekly_schedule.map((p: any, idx: number) => ({
+          id: p.period_id || idx + 1,
+          day: p.day_of_week as any,
+          period_no: p.period_number,
+          start_time: p.start_time || '09:00 AM',
+          end_time: p.end_time || '09:45 AM',
+          class_name: p.class_name || `Class ${p.class_id}`,
+          section: p.section || 'A',
+          subject: p.subject_name || 'Subject',
+          room_no: p.room_number || 'Room 101',
+        }));
+      }
+    } catch (e) {
+      console.warn('Could not fetch teacher timetable from backend, falling back', e);
+    }
     return [...initialTimetable];
   },
 

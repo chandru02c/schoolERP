@@ -39,7 +39,7 @@ export const StudentHomeScreen = ({ navigation }: any) => {
       <Header
         orgName={student?.organization_name || 'Global International School'}
         userName={student?.name || 'Aarav Sharma'}
-        userAvatar={student?.avatar_url || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150'}
+        userAvatar={student?.student_photo || student?.avatar_url || (student as any)?.avatar || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150'}
         onNotificationPress={() => navigation.navigate('StudentNotifications')}
         onProfilePress={() => navigation.navigate('StudentProfile')}
       />
@@ -53,7 +53,7 @@ export const StudentHomeScreen = ({ navigation }: any) => {
         <CustomCard style={styles.badgeCard}>
           <View style={styles.badgeRow}>
             <Image
-              source={{ uri: student?.avatar_url || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150' }}
+              source={{ uri: student?.student_photo || student?.avatar_url || (student as any)?.avatar || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150' }}
               style={styles.avatarImg}
             />
             <View style={styles.badgeInfo}>

@@ -383,7 +383,12 @@ export const TeacherHomeScreen = ({ navigation }: any) => {
                 </View>
                 <View style={styles.eventInfoCol}>
                   <Text style={styles.eventTitle}>{evt.title || evt.event_name}</Text>
-                  <Text style={styles.eventDateText}>Date: {evt.event_date || evt.start_date}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 3 }}>
+                    <Ionicons name="calendar-outline" size={13} color={colors.primary} style={{ marginRight: 4 }} />
+                    <Text style={styles.eventDateText}>{evt.event_date || evt.date}</Text>
+                    <Ionicons name="time-outline" size={13} color={colors.textSecondary} style={{ marginLeft: 10, marginRight: 4 }} />
+                    <Text style={styles.eventDateText}>{evt.time || '09:00 AM - 04:00 PM'}</Text>
+                  </View>
                   <Text style={styles.eventDescText} numberOfLines={2}>
                     {evt.description || 'School campus event'}
                   </Text>

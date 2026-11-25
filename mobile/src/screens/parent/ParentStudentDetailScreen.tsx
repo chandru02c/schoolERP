@@ -60,7 +60,15 @@ export const ParentStudentDetailScreen = ({ route, navigation }: any) => {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Full Student Information Card */}
         <CustomCard style={styles.studentInfoCard}>
-          <Image source={{ uri: student.avatar_url }} style={styles.avatarLarge} />
+          <Image
+            source={{
+              uri:
+                student.avatar_url ||
+                student.student_photo ||
+                'https://images.unsplash.com/photo-1544717305-2782549b5136?w=150',
+            }}
+            style={styles.avatarLarge}
+          />
           <Text style={styles.studentName}>{student.student_name}</Text>
           <Text style={styles.admissionText}>Admission ID: {student.admission_number}</Text>
           <Text style={styles.classText}>

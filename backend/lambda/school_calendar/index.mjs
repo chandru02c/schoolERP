@@ -132,6 +132,49 @@ export const handler = async (event) => {
             });
         }
 
+        // 3. Fetch published events from event_master for org
+        const eventMasterRows = await dbExecute(
+            `SELECT event_id, event_title, event_type, event_start_date, event_end_date, event_description, event_short_description, thumbnail_image_url
+             FROM school.event_master
+             WHERE org_id = $1 AND is_deleted = FALSE AND publish_status = 'PUBLISHED'
+             ORDER BY event_start_date ASC;`,
+            [orgId]
+        );
+
+        if (eventMasterRows && eventMasterRows.length > 0) {
+            eventMasterRows.forEach((ev) => {
+                const dateStr = typeof ev.event_start_date === 'string'
+                    ? ev.event_start_date.split('T')[0]
+                    : new Date(ev.event_start_date).toISOString().split('T')[0];
+
+                let timeStr = '09:00 AM - 04:00 PM';
+                if (ev.event_start_date) {
+                    try {
+                        const d = new Date(ev.event_start_date);
+                        if (!isNaN(d.getTime())) {
+                            const hours = d.getHours();
+                            const minutes = d.getMinutes();
+                            if (hours !== 0 || minutes !== 0) {
+                                timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            }
+                        }
+                    } catch {}
+                }
+
+                eventsList.push({
+                    id: `evt-${ev.event_id}`,
+                    title: ev.event_title,
+                    date: dateStr,
+                    endDate: ev.event_end_date ? (typeof ev.event_end_date === 'string' ? ev.event_end_date.split('T')[0] : new Date(ev.event_end_date).toISOString().split('T')[0]) : undefined,
+                    type: (ev.event_type || 'EVENT').toLowerCase(),
+                    description: ev.event_short_description || ev.event_description || ev.event_title,
+                    time: timeStr,
+                    location: 'Main Campus',
+                    image_url: ev.thumbnail_image_url || undefined,
+                });
+            });
+        }
+
         // Sort events by date ascending
         eventsList.sort((a, b) => a.date.localeCompare(b.date));
 

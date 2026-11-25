@@ -28,6 +28,23 @@ apiClient.interceptors.request.use(
         const orgId = session?.org_id || TENANT_ID;
         config.headers['org_id'] = String(orgId);
         config.headers['Org_Id'] = String(orgId);
+        config.headers['ORG_ID'] = String(orgId);
+        config.headers['x-org-id'] = String(orgId);
+
+        // Ensure params contains mandatory org_id
+        if (!config.params) {
+          config.params = {};
+        }
+        if (!config.params.org_id) {
+          config.params.org_id = String(orgId);
+        }
+
+        // Ensure body contains mandatory org_id
+        if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
+          if (!config.data.org_id) {
+            config.data.org_id = Number(orgId) || orgId;
+          }
+        }
 
         if (session?.token) {
           config.headers['Authorization'] = `Bearer ${session.token}`;
