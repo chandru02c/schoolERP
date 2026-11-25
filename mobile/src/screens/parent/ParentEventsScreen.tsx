@@ -1,108 +1,107 @@
-import React, { useState } from 'react';
+/**
+ * File: src/screens/parent/ParentEventsScreen.tsx
+ * Parent School Events & Activities screen.
+ * 
+ * Features:
+ * - Load school events using calendarService.getCalendarEvents (passes org_id as mandatory)
+ * - Display active future upcoming events sorted by nearest upcoming date first
+ * - Show Event Name, Date, Time, and Description
+ * - Filter by Upcoming / Past / All
+ * - Consistent UI with TeacherEventsScreen and Calendar Upcoming Events
+ */
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
   Text,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../constants';
-import { CustomCard, Badge } from '../../components';
+import { calendarService, CalendarEventItem } from '../../services/calendarService';
+import { OrganizationHeader } from '../../components/OrganizationHeader';
+import { colors } from '../../theme';
 import { useBackToHome } from '../../hooks/useBackToHome';
 
-interface SchoolEvent {
-  id: string;
-  title: string;
-  type: 'EVENT' | 'HOLIDAY' | 'EXAM' | 'CALENDAR';
-  date: string;
-  time?: string;
-  location?: string;
-  description: string;
-}
-
-const SAMPLE_EVENTS: SchoolEvent[] = [
-  {
-    id: 'ev-1',
-    title: 'Mid-Term Examinations Begin',
-    type: 'EXAM',
-    date: '16 Nov - 24 Nov 2026',
-    time: '09:00 AM - 12:00 PM',
-    location: 'Main Examination Hall',
-    description: 'Comprehensive mid-term evaluations for Grades 6 through 12.',
-  },
-  {
-    id: 'ev-2',
-    title: 'Guru Nanak Jayanti Holiday',
-    type: 'HOLIDAY',
-    date: '24 Nov 2026',
-    description: 'Campus closed for students and teachers.',
-  },
-  {
-    id: 'ev-3',
-    title: 'Parent-Teacher Meeting (PTM)',
-    type: 'EVENT',
-    date: '28 Nov 2026',
-    time: '09:30 AM - 01:30 PM',
-    location: 'Respective Classrooms',
-    description: 'Quarterly review discussion with teachers regarding student academic progress and scorecards.',
-  },
-  {
-    id: 'ev-4',
-    title: 'Annual Science & Tech Fair',
-    type: 'EVENT',
-    date: '05 Dec - 06 Dec 2026',
-    time: '10:00 AM - 04:00 PM',
-    location: 'Campus Auditorium & Grounds',
-    description: 'All parents are cordially invited to visit student robotics exhibits and science displays.',
-  },
-  {
-    id: 'ev-5',
-    title: 'Winter Vacation Closure',
-    type: 'HOLIDAY',
-    date: '24 Dec 2026 - 02 Jan 2027',
-    description: 'Winter vacation. School reopens on Monday, January 4th.',
-  },
-];
-
-export const ParentEventsScreen = ({ navigation }: any) => {
+export const ParentEventsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const goHome = useBackToHome(navigation, 'Parent');
-  const [filterType, setFilterType] = useState<'ALL' | 'EVENT' | 'HOLIDAY' | 'CALENDAR'>('ALL');
+  const [events, setEvents] = useState<CalendarEventItem[]>([]);
+  const [activeFilter, setActiveFilter] = useState<'UPCOMING' | 'PAST' | 'ALL'>('UPCOMING');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const filteredEvents = SAMPLE_EVENTS.filter((e) => {
-    if (filterType === 'ALL') return true;
-    if (filterType === 'EVENT') return e.type === 'EVENT' || e.type === 'EXAM';
-    return e.type === filterType;
-  });
+  const loadEvents = useCallback(async () => {
+    try {
+      const data = await calendarService.getCalendarEvents();
+      setEvents(data);
+    } catch (err) {
+      console.warn('[ParentEventsScreen] Load error:', err);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadEvents();
+  };
+
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+  const filteredEvents = useMemo(() => {
+    if (activeFilter === 'UPCOMING') {
+      return events
+        .filter((e) => (e.date || '') >= todayStr)
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    }
+    if (activeFilter === 'PAST') {
+      return events
+        .filter((e) => (e.date || '') < todayStr)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    }
+    return [...events].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  }, [events, activeFilter, todayStr]);
+
+  const getBadgeStyle = (type: string) => {
+    switch (type) {
+      case 'holiday':
+        return { bg: colors.errorLight || '#FEE2E2', text: colors.error, label: 'Holiday' };
+      case 'exam':
+        return { bg: colors.warningLight || '#FEF3C7', text: '#B45309', label: 'Exam' };
+      default:
+        return { bg: colors.successLight || '#DCFCE7', text: colors.success, label: 'Event' };
+    }
+  };
 
   return (
     <View style={styles.container}>
-      {/* Top Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={goHome}>
-          <Ionicons name="arrow-back" size={24} color={colors.white} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>School Events & Holidays</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <OrganizationHeader
+        title="School Events"
+        showBack
+        onBack={goHome}
+        onNotificationPress={() => navigation.navigate('ParentNotifications')}
+        onProfilePress={() => navigation.navigate('ParentProfileTab')}
+      />
 
-      {/* Filter Tabs Bar */}
+      {/* Filter Tabs Row */}
       <View style={styles.tabsRow}>
-        {(['ALL', 'EVENT', 'HOLIDAY', 'CALENDAR'] as const).map((tab) => {
-          const isSelected = filterType === tab;
-          const label =
-            tab === 'ALL'
-              ? 'All'
-              : tab === 'EVENT'
-              ? 'Upcoming Events'
-              : tab === 'HOLIDAY'
-              ? 'Holiday List'
-              : 'Calendar';
+        {(['UPCOMING', 'PAST', 'ALL'] as const).map((tab) => {
+          const isSelected = activeFilter === tab;
+          const label = tab === 'UPCOMING' ? 'Upcoming Events' : tab === 'PAST' ? 'Past Events' : 'All Events';
           return (
             <TouchableOpacity
               key={tab}
               style={[styles.tabBtn, isSelected && styles.tabBtnActive]}
-              onPress={() => setFilterType(tab)}
+              onPress={() => setActiveFilter(tab)}
             >
               <Text style={[styles.tabText, isSelected && styles.tabTextActive]}>
                 {label}
@@ -113,51 +112,63 @@ export const ParentEventsScreen = ({ navigation }: any) => {
       </View>
 
       {/* Events List */}
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {filteredEvents.map((item) => (
-          <CustomCard key={item.id} style={styles.eventCard}>
-            <View style={styles.cardTopRow}>
-              <Badge
-                label={item.type}
-                variant={
-                  item.type === 'HOLIDAY'
-                    ? 'success'
-                    : item.type === 'EXAM'
-                    ? 'danger'
-                    : item.type === 'EVENT'
-                    ? 'primary'
-                    : 'info'
-                }
-                size="small"
-              />
-              <View style={styles.datePill}>
-                <Ionicons name="calendar-outline" size={13} color={colors.primary} />
-                <Text style={styles.dateText}>{item.date}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.eventTitle}>{item.title}</Text>
-            <Text style={styles.eventDesc}>{item.description}</Text>
-
-            {(item.time || item.location) && (
-              <View style={styles.metaRow}>
-                {item.time && (
-                  <View style={styles.metaItem}>
-                    <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
-                    <Text style={styles.metaText}>{item.time}</Text>
-                  </View>
+      {isLoading ? (
+        <View style={styles.loadingCenter}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Fetching school events...</Text>
+        </View>
+      ) : filteredEvents.length === 0 ? (
+        <View style={styles.emptyCenter}>
+          <Ionicons name="calendar-outline" size={44} color={colors.textMuted} />
+          <Text style={styles.emptyTitle}>No Events Found</Text>
+          <Text style={styles.emptySubtitle}>There are no {activeFilter.toLowerCase()} events listed.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredEvents}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+          renderItem={({ item }) => {
+            const badge = getBadgeStyle(item.type);
+            const hasImage = item.image_url && item.image_url.startsWith('http');
+            return (
+              <View style={styles.eventCard}>
+                {hasImage && (
+                  <Image source={{ uri: item.image_url }} style={styles.eventBanner} />
                 )}
-                {item.location && (
-                  <View style={styles.metaItem}>
-                    <Ionicons name="location-outline" size={13} color={colors.textSecondary} />
-                    <Text style={styles.metaText}>{item.location}</Text>
+
+                <View style={styles.cardBody}>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.eventTitle}>{item.title || item.name}</Text>
+                    <View style={[styles.typeBadge, { backgroundColor: badge.bg }]}>
+                      <Text style={[styles.typeBadgeText, { color: badge.text }]}>{badge.label}</Text>
+                    </View>
                   </View>
-                )}
+
+                  <View style={styles.metaRow}>
+                    <Ionicons name="calendar-outline" size={14} color={colors.primary} style={{ marginRight: 4 }} />
+                    <Text style={styles.metaText}>{item.date || 'TBA'}</Text>
+
+                    <Ionicons name="time-outline" size={14} color={colors.textSecondary} style={{ marginLeft: 12, marginRight: 4 }} />
+                    <Text style={styles.metaText}>{item.time || '09:00 AM - 04:00 PM'}</Text>
+
+                    {item.location ? (
+                      <>
+                        <Ionicons name="location-outline" size={14} color={colors.textSecondary} style={{ marginLeft: 12, marginRight: 4 }} />
+                        <Text style={styles.metaText}>{item.location}</Text>
+                      </>
+                    ) : null}
+                  </View>
+
+                  <Text style={styles.eventDesc}>{item.description || 'School campus event.'}</Text>
+                </View>
               </View>
-            )}
-          </CustomCard>
-        ))}
-      </ScrollView>
+            );
+          }}
+        />
+      )}
     </View>
   );
 };
@@ -165,108 +176,127 @@ export const ParentEventsScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    backgroundColor: colors.primary,
-    paddingTop: 48,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backBtn: {
-    padding: 6,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.white,
+    backgroundColor: colors.background,
   },
   tabsRow: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderColor: '#E2E8F0',
+    backgroundColor: colors.card,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
   tabBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: '#F1F5F9',
-    marginRight: 6,
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    borderRadius: 8,
   },
   tabBtnActive: {
     backgroundColor: colors.primary,
   },
   tabText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.dark,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   tabTextActive: {
     color: colors.white,
+    fontWeight: '700',
   },
-  scrollContent: {
+  listContent: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
   eventCard: {
-    padding: 16,
-    marginVertical: 6,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#163B88',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
-  cardTopRow: {
+  eventBanner: {
+    width: '100%',
+    height: 140,
+    backgroundColor: '#EEF2FF',
+  },
+  cardBody: {
+    padding: 14,
+  },
+  titleRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  datePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  dateText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
-    marginLeft: 4,
+    marginBottom: 6,
   },
   eventTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
-    color: colors.dark,
-    marginBottom: 4,
+    color: colors.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  metaText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
   eventDesc: {
     fontSize: 13,
     color: colors.textSecondary,
     lineHeight: 18,
   },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  metaItem: {
-    flexDirection: 'row',
+  loadingCenter: {
+    flex: 1,
     alignItems: 'center',
-    marginRight: 14,
-    marginTop: 2,
+    justifyContent: 'center',
+    padding: 30,
   },
-  metaText: {
+  loadingText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  emptyCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 30,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 12,
+  },
+  emptySubtitle: {
     fontSize: 12,
-    color: colors.textSecondary,
-    marginLeft: 4,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 6,
   },
 });
 

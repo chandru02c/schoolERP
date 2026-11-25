@@ -28,13 +28,15 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 
 export const TeacherTimetablePage: React.FC = () => {
   const [timetable, setTimetable] = useState<TimetableSlot[]>([]);
-  const [selectedDay, setSelectedDay] = useState<string>('Monday');
+  const todayName = (['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()] || 'Monday');
+  const [selectedDay, setSelectedDay] = useState<string>(DAYS.includes(todayName as any) ? todayName : 'Monday');
   const [viewMode, setViewMode] = useState<'daily' | 'weekly'>('daily');
 
   useEffect(() => {
     teacherApiService.getTimetable().then(setTimetable);
   }, []);
 
+  const todaySlots = timetable.filter((s) => s.day === todayName).sort((a, b) => a.period_no - b.period_no);
   const daySlots = timetable.filter((s) => s.day === selectedDay).sort((a, b) => a.period_no - b.period_no);
 
   return (
@@ -90,6 +92,76 @@ export const TeacherTimetablePage: React.FC = () => {
           </Button>
         </Box>
       </Box>
+
+      {/* ── Today's Schedule Highlight (Shown First) ── */}
+      <Paper
+        sx={{
+          p: 2.5,
+          mb: 3.5,
+          borderRadius: 3.5,
+          background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
+          color: '#fff',
+          boxShadow: '0 8px 24px rgba(13,148,136,0.2)',
+        }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TodayIcon sx={{ color: '#CCFBF1' }} />
+            <Typography variant="h6" fontWeight={800} color="#fff">
+              Today's Schedule ({todayName})
+            </Typography>
+          </Box>
+          <Chip
+            label={`${todaySlots.length} Periods Scheduled`}
+            size="small"
+            sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 700 }}
+          />
+        </Box>
+
+        {todaySlots.length === 0 ? (
+          <Typography variant="body2" sx={{ color: '#CCFBF1' }}>
+            No periods scheduled for today. Have a productive day!
+          </Typography>
+        ) : (
+          <Grid container spacing={2}>
+            {todaySlots.map((slot) => (
+              <Grid item xs={12} sm={6} md={4} key={`today-${slot.id}`}>
+                <Paper
+                  sx={{
+                    p: 1.8,
+                    borderRadius: 2.5,
+                    bgcolor: 'rgba(255,255,255,0.95)',
+                    color: '#0F172A',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Chip
+                      label={`Period ${slot.period_no}`}
+                      size="small"
+                      sx={{ bgcolor: '#0D9488', color: '#fff', fontWeight: 800, height: 22 }}
+                    />
+                    <Typography variant="caption" fontWeight={700} color="#0369A1">
+                      {slot.class_name} - Sec {slot.section}
+                    </Typography>
+                  </Box>
+                  <Typography variant="subtitle1" fontWeight={800} color="#0F172A">
+                    {slot.subject}
+                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1, color: '#64748B' }}>
+                    <Typography variant="caption" fontWeight={600}>
+                      {slot.start_time} - {slot.end_time}
+                    </Typography>
+                    <Typography variant="caption" fontWeight={600}>
+                      {slot.room_no}
+                    </Typography>
+                  </Box>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        )}
+      </Paper>
 
       {viewMode === 'daily' ? (
         <Box>

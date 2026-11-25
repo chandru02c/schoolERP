@@ -87,6 +87,9 @@ export const handler = async (event) => {
         return respond(400, false, 'teacher_id or class_id/academic_set_id is required.');
     }
 
+    const workingDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const timetableByDay = {};
+
     try {
         const activeYear = await getActiveAcademicYear(dbExecute, orgId);
         if (!activeYear) {
@@ -122,7 +125,111 @@ export const handler = async (event) => {
             }
         }
 
-        // Query assignments for teacher or specific class
+        // First check if actual timetable is configured in school.timetable_detail
+        let ttQuery = `
+            SELECT
+                td.period_id,
+                td.day_of_week,
+                td.period_number,
+                td.start_time,
+                td.end_time,
+                td.subject_name,
+                td.subject_code,
+                td.teacher_id,
+                COALESCE(t.full_name, TRIM(CONCAT(t.first_name, ' ', t.last_name)), 'Faculty') AS teacher_name,
+                tm.academic_set_id,
+                s.class_id,
+                s.section,
+                COALESCE(td.room_number, s.room_number, 'Room ' || s.class_id) AS room_number,
+                COALESCE(cm.class_name, 'Class ' || s.class_id) AS class_name,
+                COALESCE(td.color, '#3B82F6') AS color
+            FROM school.timetable_detail td
+            JOIN school.timetable_master tm ON td.timetable_id = tm.timetable_id AND td.org_id = tm.org_id
+            JOIN school.academic_set s ON tm.academic_set_id = s.academic_set_id AND tm.org_id = s.org_id
+            LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
+            LEFT JOIN school.teacher_details t ON td.teacher_id = t.teacher_id AND td.org_id = t.org_id
+            WHERE td.org_id = $1
+              AND tm.academic_year_id = $2
+              AND tm.is_active = TRUE
+        `;
+        const ttParams = [orgId, academicYearId];
+
+        if (teacherId > 0) {
+            ttQuery += ` AND td.teacher_id = $${ttParams.length + 1}`;
+            ttParams.push(teacherId);
+        }
+
+        if (validatedAssignment) {
+            ttQuery += ` AND (s.academic_set_id = $${ttParams.length + 1} OR s.class_id = $${ttParams.length + 2})`;
+            ttParams.push(Number(validatedAssignment.academic_set_id), Number(validatedAssignment.class_id));
+        } else if (classIdFilter && classIdFilter !== 'all' && classIdFilter !== '') {
+            const cleanClassId = String(classIdFilter).match(/\d+/)?.[0] || String(classIdFilter);
+            ttQuery += ` AND (s.class_id::TEXT = $${ttParams.length + 1} OR s.academic_set_id::TEXT = $${ttParams.length + 1} OR s.class_id::TEXT = $${ttParams.length + 2} OR s.academic_set_id::TEXT = $${ttParams.length + 2})`;
+            ttParams.push(String(classIdFilter), String(cleanClassId));
+        }
+
+        ttQuery += ` ORDER BY td.period_number`;
+        const ttRows = await dbExecute(ttQuery, ttParams);
+
+        // const workingDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        // const timetableByDay = {};
+        workingDays.forEach(day => { timetableByDay[day] = []; });
+
+        if (ttRows && ttRows.length > 0) {
+            ttRows.forEach(r => {
+                const day = r.day_of_week;
+                if (!timetableByDay[day]) timetableByDay[day] = [];
+                timetableByDay[day].push({
+                    id: `period-${r.period_id}`,
+                    periodId: r.period_id,
+                    periodNumber: r.period_number,
+                    subject: r.subject_name,
+                    subjectCode: r.subject_code,
+                    className: `${r.class_name} - ${r.section}`,
+                    classId: String(r.class_id),
+                    academic_set_id: String(r.academic_set_id),
+                    section: r.section,
+                    teacherName: r.teacher_name,
+                    teacherId: r.teacher_id,
+                    room: r.room_number,
+                    time: r.start_time && r.end_time ? `${r.start_time} - ${r.end_time}` : `Period ${r.period_number}`,
+                    startTime: r.start_time,
+                    endTime: r.end_time,
+                    color: r.color,
+                    day: day
+                });
+            });
+
+            // Sort each day
+            workingDays.forEach(day => {
+                timetableByDay[day].sort((a, b) => a.periodNumber - b.periodNumber);
+            });
+
+            const todayName = DAYS_OF_WEEK[new Date().getDay()] || 'Monday';
+            const effectiveToday = workingDays.includes(todayName) ? todayName : 'Monday';
+
+            if (isTodayOnly) {
+                return respond(200, true, "Today's schedule retrieved successfully.", {
+                    day: effectiveToday,
+                    periods: timetableByDay[effectiveToday] || []
+                });
+            }
+
+            if (requestedDay && timetableByDay[requestedDay]) {
+                return respond(200, true, `${requestedDay} schedule retrieved successfully.`, {
+                    day: requestedDay,
+                    periods: timetableByDay[requestedDay]
+                });
+            }
+
+            return respond(200, true, 'Weekly timetable retrieved successfully.', {
+                today: effectiveToday,
+                todaySchedule: timetableByDay[effectiveToday] || [],
+                weeklyTimetable: timetableByDay
+            });
+        }
+
+        // Query assignments for teacher or specific class (fallback if no timetable saved yet)
         let query = `
             SELECT
                 a.assignment_id,
@@ -166,8 +273,8 @@ export const handler = async (event) => {
         const rows = await dbExecute(query, params);
 
         // Build week timetable
-        const workingDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const timetableByDay = {};
+        // const workingDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        // const timetableByDay = {};
 
         workingDays.forEach((dayName, dayIndex) => {
             const dayPeriods = [];

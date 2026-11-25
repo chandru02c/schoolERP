@@ -16,6 +16,9 @@ import {
   TeacherAcademicAssignments,
   AcademicDashboardStats,
   ClassSubject,
+  TimetableMasterItem,
+  ClassTimetableData,
+  TimetablePeriod,
 } from '../types/academic';
 
 import { sessionService } from '../utils/sessionService';
@@ -220,6 +223,72 @@ export const academicApi = {
     return response.data;
   },
 
+  /**
+   * Get timetables list for an academic year
+   */
+  async getTimetables(academicYearId?: number): Promise<AcademicApiResponse<TimetableMasterItem[]>> {
+    const orgId = getOrgId();
+    const response = await axiosInstance.get<AcademicApiResponse<TimetableMasterItem[]>>('/academic', {
+      params: {
+        action: 'GET_TIMETABLES',
+        org_id: orgId,
+        ...(academicYearId && { academic_year_id: academicYearId }),
+      },
+      headers: { org_id: String(orgId) },
+    });
+    return response.data;
+  },
+
+  /**
+   * Get weekly and today timetable for a specific class set
+   */
+  async getClassTimetable(academicSetId: number): Promise<AcademicApiResponse<ClassTimetableData>> {
+    const orgId = getOrgId();
+    const response = await axiosInstance.get<AcademicApiResponse<ClassTimetableData>>('/academic', {
+      params: {
+        action: 'GET_CLASS_TIMETABLE',
+        org_id: orgId,
+        academic_set_id: academicSetId,
+      },
+      headers: { org_id: String(orgId) },
+    });
+    return response.data;
+  },
+
+  /**
+   * Get teacher's personal timetable
+   */
+  async getTeacherTimetable(teacherId: number, academicYearId?: number): Promise<AcademicApiResponse<any>> {
+    const orgId = getOrgId();
+    const response = await axiosInstance.get<AcademicApiResponse<any>>('/academic', {
+      params: {
+        action: 'GET_TEACHER_TIMETABLE',
+        org_id: orgId,
+        teacher_id: teacherId,
+        ...(academicYearId && { academic_year_id: academicYearId }),
+      },
+      headers: { org_id: String(orgId) },
+    });
+    return response.data;
+  },
+
+  /**
+   * Get student's class timetable by student ID
+   */
+  async getStudentTimetable(studentId: number, academicYearId?: number): Promise<AcademicApiResponse<any>> {
+    const orgId = getOrgId();
+    const response = await axiosInstance.get<AcademicApiResponse<any>>('/academic', {
+      params: {
+        action: 'GET_STUDENT_TIMETABLE',
+        org_id: orgId,
+        student_id: studentId,
+        ...(academicYearId && { academic_year_id: academicYearId }),
+      },
+      headers: { org_id: String(orgId) },
+    });
+    return response.data;
+  },
+
   // ==================== MUTATION APIs ====================
 
   /**
@@ -376,5 +445,35 @@ export const academicApi = {
   },
   async publishExamMarks(exam_id: number) {
     return this.manageAcademic('PUBLISH_EXAM_MARKS', { exam_id });
+  },
+
+  // Timetable
+  async saveTimetable(data: {
+    academic_set_id: number;
+    academic_year_id?: number;
+    timetable_name?: string;
+    periods: Array<{
+      period_number: number;
+      day_of_week: string;
+      start_time: string;
+      end_time: string;
+      subject_name: string;
+      subject_code?: string;
+      teacher_id: number;
+      room_number?: string;
+      color?: string;
+    }>;
+  }) {
+    return this.manageAcademic('SAVE_TIMETABLE', data);
+  },
+  async copyTimetable(data: {
+    source_academic_set_id: number;
+    target_academic_set_id: number;
+    academic_year_id?: number;
+  }) {
+    return this.manageAcademic('COPY_TIMETABLE', data);
+  },
+  async deleteTimetable(timetable_id: number) {
+    return this.manageAcademic('DELETE_TIMETABLE', { timetable_id });
   },
 };

@@ -38,6 +38,7 @@ import {
   ChevronRight as ChevronRightIcon,
   PhoneAndroid as PhoneAndroidIcon,
   Person as PersonIcon,
+  CalendarMonth as CalendarMonthIcon,
 } from '@mui/icons-material';
 
 import { RootState } from '../redux/store';
@@ -69,6 +70,7 @@ const getAdminNavItems = (teacherId: string | number): NavItem[] => [
       { label: 'Student Promotions', path: `/admin/${teacherId}/academic/promotions`, icon: <DashboardCustomizeIcon /> },
       { label: 'Academic Calendar', path: `/admin/${teacherId}/academic/calendar`, icon: <EventIcon /> },
       { label: 'Exams & Marks', path: `/admin/${teacherId}/academic/exams`, icon: <FormatListBulletedIcon /> },
+      { label: 'Class Timetable', path: `/admin/${teacherId}/academic/timetable`, icon: <CalendarMonthIcon /> },
     ],
   },
   {

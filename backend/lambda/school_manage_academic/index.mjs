@@ -200,6 +200,24 @@ export const handler = async (event) => {
         if (!body.exam_id) {
             return respond(400, false, 'exam_id is required');
         }
+    } else if (action === 'SAVE_TIMETABLE') {
+        if (!body.academic_set_id) {
+            return respond(400, false, 'academic_set_id is required');
+        }
+        if (!body.periods || !Array.isArray(body.periods)) {
+            return respond(400, false, 'periods array is required');
+        }
+    } else if (action === 'COPY_TIMETABLE') {
+        if (!body.source_academic_set_id && !body.source_set_id) {
+            return respond(400, false, 'source_academic_set_id is required');
+        }
+        if (!body.target_academic_set_id && !body.target_set_id) {
+            return respond(400, false, 'target_academic_set_id is required');
+        }
+    } else if (action === 'DELETE_TIMETABLE') {
+        if (!body.timetable_id && !body.academic_set_id) {
+            return respond(400, false, 'timetable_id or academic_set_id is required');
+        }
     }
 
     try {

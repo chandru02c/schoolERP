@@ -717,6 +717,367 @@ BEGIN
             'timestamp', CURRENT_TIMESTAMP
         );
 
+    -- =========================================================================
+    -- 14. GET_TIMETABLES
+    -- =========================================================================
+    ELSIF v_action = 'GET_TIMETABLES' THEN
+        SELECT COALESCE(jsonb_agg(
+            jsonb_build_object(
+                'timetable_id', tm.timetable_id,
+                'org_id', tm.org_id,
+                'academic_year_id', tm.academic_year_id,
+                'year_name', ay.year_name,
+                'academic_set_id', tm.academic_set_id,
+                'set_name', COALESCE(s.set_name, 'Class ' || s.class_id || ' - ' || s.section),
+                'class_id', s.class_id,
+                'class_name', COALESCE(cm.class_name, 'Class ' || s.class_id),
+                'section', s.section,
+                'timetable_name', tm.timetable_name,
+                'status', tm.status,
+                'periods_count', (SELECT COUNT(*) FROM school.timetable_detail td WHERE td.timetable_id = tm.timetable_id),
+                'days_count', (SELECT COUNT(DISTINCT td.day_of_week) FROM school.timetable_detail td WHERE td.timetable_id = tm.timetable_id),
+                'created_at', tm.created_at,
+                'updated_at', tm.updated_at
+            ) ORDER BY s.class_id, s.section
+        ), '[]'::jsonb)
+        INTO v_data
+        FROM school.timetable_master tm
+        JOIN school.academic_set s ON tm.academic_set_id = s.academic_set_id AND tm.org_id = s.org_id
+        LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
+        LEFT JOIN school.academic_year ay ON tm.academic_year_id = ay.academic_year_id AND tm.org_id = ay.org_id
+        WHERE tm.org_id = p_org_id
+          AND tm.is_active = TRUE
+          AND (v_target_year_id IS NULL OR tm.academic_year_id = v_target_year_id);
+
+        RETURN jsonb_build_object(
+            'success', TRUE,
+            'action', v_action,
+            'academic_year_id', v_target_year_id,
+            'data', v_data,
+            'timestamp', CURRENT_TIMESTAMP
+        );
+
+    -- =========================================================================
+    -- 15. GET_CLASS_TIMETABLE
+    -- =========================================================================
+    ELSIF v_action = 'GET_CLASS_TIMETABLE' THEN
+        IF p_academic_set_id IS NULL AND (p_params->>'class_id') IS NOT NULL THEN
+            SELECT academic_set_id INTO p_academic_set_id
+            FROM school.academic_set
+            WHERE org_id = p_org_id
+              AND class_id = (p_params->>'class_id')::BIGINT
+              AND (v_target_year_id IS NULL OR academic_year_id = v_target_year_id)
+              AND is_deleted = FALSE
+            LIMIT 1;
+        END IF;
+
+        IF p_academic_set_id IS NULL THEN
+            RETURN jsonb_build_object(
+                'success', FALSE,
+                'error_code', 'ERR_SET_REQUIRED',
+                'message', 'academic_set_id is required to fetch class timetable',
+                'timestamp', CURRENT_TIMESTAMP
+            );
+        END IF;
+
+        SELECT jsonb_build_object(
+            'timetable_id', tm.timetable_id,
+            'org_id', tm.org_id,
+            'academic_year_id', tm.academic_year_id,
+            'year_name', ay.year_name,
+            'academic_set_id', s.academic_set_id,
+            'set_name', COALESCE(s.set_name, 'Class ' || s.class_id || ' - ' || s.section),
+            'class_id', s.class_id,
+            'class_name', COALESCE(cm.class_name, 'Class ' || s.class_id),
+            'section', s.section,
+            'room_number', s.room_number,
+            'timetable_name', tm.timetable_name,
+            'status', COALESCE(tm.status, 'DRAFT'),
+            'periods', COALESCE((
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'period_id', td.period_id,
+                        'day_of_week', td.day_of_week,
+                        'period_number', td.period_number,
+                        'start_time', td.start_time,
+                        'end_time', td.end_time,
+                        'subject_name', td.subject_name,
+                        'subject_code', td.subject_code,
+                        'teacher_id', td.teacher_id,
+                        'teacher_name', COALESCE(t.full_name, TRIM(CONCAT(t.first_name, ' ', t.last_name)), 'Faculty'),
+                        'room_number', td.room_number,
+                        'color', td.color
+                    ) ORDER BY 
+                        CASE td.day_of_week
+                            WHEN 'Monday' THEN 1
+                            WHEN 'Tuesday' THEN 2
+                            WHEN 'Wednesday' THEN 3
+                            WHEN 'Thursday' THEN 4
+                            WHEN 'Friday' THEN 5
+                            WHEN 'Saturday' THEN 6
+                            WHEN 'Sunday' THEN 7
+                            ELSE 8
+                        END,
+                        td.period_number
+                )
+                FROM school.timetable_detail td
+                LEFT JOIN school.teacher_details t ON td.teacher_id = t.teacher_id AND td.org_id = t.org_id
+                WHERE td.timetable_id = tm.timetable_id
+            ), '[]'::jsonb),
+            'today_schedule', COALESCE((
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'period_id', td.period_id,
+                        'day_of_week', td.day_of_week,
+                        'period_number', td.period_number,
+                        'start_time', td.start_time,
+                        'end_time', td.end_time,
+                        'subject_name', td.subject_name,
+                        'subject_code', td.subject_code,
+                        'teacher_id', td.teacher_id,
+                        'teacher_name', COALESCE(t.full_name, TRIM(CONCAT(t.first_name, ' ', t.last_name)), 'Faculty'),
+                        'room_number', td.room_number,
+                        'color', td.color
+                    ) ORDER BY td.period_number
+                )
+                FROM school.timetable_detail td
+                LEFT JOIN school.teacher_details t ON td.teacher_id = t.teacher_id AND td.org_id = t.org_id
+                WHERE td.timetable_id = tm.timetable_id
+                  AND td.day_of_week = TRIM(TO_CHAR(CURRENT_DATE, 'Day'))
+            ), '[]'::jsonb)
+        )
+        INTO v_data
+        FROM school.academic_set s
+        LEFT JOIN school.timetable_master tm ON s.academic_set_id = tm.academic_set_id AND s.org_id = tm.org_id AND tm.is_active = TRUE
+        LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
+        LEFT JOIN school.academic_year ay ON s.academic_year_id = ay.academic_year_id AND s.org_id = ay.org_id
+        WHERE s.academic_set_id = p_academic_set_id
+          AND s.org_id = p_org_id;
+
+        RETURN jsonb_build_object(
+            'success', TRUE,
+            'action', v_action,
+            'data', v_data,
+            'timestamp', CURRENT_TIMESTAMP
+        );
+
+    -- =========================================================================
+    -- 16. GET_TEACHER_TIMETABLE
+    -- =========================================================================
+    ELSIF v_action = 'GET_TEACHER_TIMETABLE' THEN
+        IF p_teacher_id IS NULL THEN
+            RETURN jsonb_build_object(
+                'success', FALSE,
+                'error_code', 'ERR_TEACHER_REQUIRED',
+                'message', 'teacher_id is required to fetch teacher timetable',
+                'timestamp', CURRENT_TIMESTAMP
+            );
+        END IF;
+
+        SELECT jsonb_build_object(
+            'teacher_id', p_teacher_id,
+            'teacher_name', (SELECT COALESCE(full_name, TRIM(CONCAT(first_name, ' ', last_name))) FROM school.teacher_details WHERE teacher_id = p_teacher_id AND org_id = p_org_id),
+            'academic_year_id', v_target_year_id,
+            'today_day', TRIM(TO_CHAR(CURRENT_DATE, 'Day')),
+            'today_schedule', COALESCE((
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'period_id', td.period_id,
+                        'day_of_week', td.day_of_week,
+                        'period_number', td.period_number,
+                        'start_time', td.start_time,
+                        'end_time', td.end_time,
+                        'subject_name', td.subject_name,
+                        'subject_code', td.subject_code,
+                        'academic_set_id', tm.academic_set_id,
+                        'class_id', s.class_id,
+                        'class_name', COALESCE(cm.class_name, 'Class ' || s.class_id),
+                        'section', s.section,
+                        'room_number', COALESCE(td.room_number, s.room_number),
+                        'color', td.color
+                    ) ORDER BY td.period_number
+                )
+                FROM school.timetable_detail td
+                JOIN school.timetable_master tm ON td.timetable_id = tm.timetable_id AND td.org_id = tm.org_id
+                JOIN school.academic_set s ON tm.academic_set_id = s.academic_set_id AND tm.org_id = s.org_id
+                LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
+                WHERE td.org_id = p_org_id
+                  AND td.teacher_id = p_teacher_id
+                  AND tm.is_active = TRUE
+                  AND (v_target_year_id IS NULL OR tm.academic_year_id = v_target_year_id)
+                  AND td.day_of_week = TRIM(TO_CHAR(CURRENT_DATE, 'Day'))
+            ), '[]'::jsonb),
+            'weekly_schedule', COALESCE((
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'period_id', td.period_id,
+                        'day_of_week', td.day_of_week,
+                        'period_number', td.period_number,
+                        'start_time', td.start_time,
+                        'end_time', td.end_time,
+                        'subject_name', td.subject_name,
+                        'subject_code', td.subject_code,
+                        'academic_set_id', tm.academic_set_id,
+                        'class_id', s.class_id,
+                        'class_name', COALESCE(cm.class_name, 'Class ' || s.class_id),
+                        'section', s.section,
+                        'room_number', COALESCE(td.room_number, s.room_number),
+                        'color', td.color
+                    ) ORDER BY 
+                        CASE td.day_of_week
+                            WHEN 'Monday' THEN 1
+                            WHEN 'Tuesday' THEN 2
+                            WHEN 'Wednesday' THEN 3
+                            WHEN 'Thursday' THEN 4
+                            WHEN 'Friday' THEN 5
+                            WHEN 'Saturday' THEN 6
+                            WHEN 'Sunday' THEN 7
+                            ELSE 8
+                        END,
+                        td.period_number
+                )
+                FROM school.timetable_detail td
+                JOIN school.timetable_master tm ON td.timetable_id = tm.timetable_id AND td.org_id = tm.org_id
+                JOIN school.academic_set s ON tm.academic_set_id = s.academic_set_id AND tm.org_id = s.org_id
+                LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
+                WHERE td.org_id = p_org_id
+                  AND td.teacher_id = p_teacher_id
+                  AND tm.is_active = TRUE
+                  AND (v_target_year_id IS NULL OR tm.academic_year_id = v_target_year_id)
+            ), '[]'::jsonb)
+        )
+        INTO v_data;
+
+        RETURN jsonb_build_object(
+            'success', TRUE,
+            'action', v_action,
+            'data', v_data,
+            'timestamp', CURRENT_TIMESTAMP
+        );
+
+    -- =========================================================================
+    -- 17. GET_STUDENT_TIMETABLE
+    -- =========================================================================
+    ELSIF v_action = 'GET_STUDENT_TIMETABLE' THEN
+        IF p_student_id IS NULL THEN
+            RETURN jsonb_build_object(
+                'success', FALSE,
+                'error_code', 'ERR_STUDENT_REQUIRED',
+                'message', 'student_id is required to fetch student timetable',
+                'timestamp', CURRENT_TIMESTAMP
+            );
+        END IF;
+
+        -- Find active enrollment set for student
+        SELECT se.academic_set_id INTO p_academic_set_id
+        FROM school.student_enrollment se
+        WHERE se.student_id = p_student_id
+          AND se.org_id = p_org_id
+          AND se.is_deleted = FALSE
+          AND se.status = 'ACTIVE'
+          AND (v_target_year_id IS NULL OR se.academic_year_id = v_target_year_id)
+        ORDER BY se.enrollment_date DESC
+        LIMIT 1;
+
+        IF p_academic_set_id IS NULL THEN
+            RETURN jsonb_build_object(
+                'success', TRUE,
+                'action', v_action,
+                'data', jsonb_build_object(
+                    'student_id', p_student_id,
+                    'message', 'Student is not actively enrolled in any class set for the academic year.',
+                    'periods', '[]'::jsonb,
+                    'today_schedule', '[]'::jsonb,
+                    'weekly_schedule', '[]'::jsonb
+                ),
+                'timestamp', CURRENT_TIMESTAMP
+            );
+        END IF;
+
+        SELECT jsonb_build_object(
+            'student_id', p_student_id,
+            'timetable_id', tm.timetable_id,
+            'org_id', tm.org_id,
+            'academic_year_id', tm.academic_year_id,
+            'year_name', ay.year_name,
+            'academic_set_id', s.academic_set_id,
+            'set_name', COALESCE(s.set_name, 'Class ' || s.class_id || ' - ' || s.section),
+            'class_id', s.class_id,
+            'class_name', COALESCE(cm.class_name, 'Class ' || s.class_id),
+            'section', s.section,
+            'room_number', s.room_number,
+            'timetable_name', tm.timetable_name,
+            'status', COALESCE(tm.status, 'DRAFT'),
+            'today_day', TRIM(TO_CHAR(CURRENT_DATE, 'Day')),
+            'today_schedule', COALESCE((
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'period_id', td.period_id,
+                        'day_of_week', td.day_of_week,
+                        'period_number', td.period_number,
+                        'start_time', td.start_time,
+                        'end_time', td.end_time,
+                        'subject_name', td.subject_name,
+                        'subject_code', td.subject_code,
+                        'teacher_id', td.teacher_id,
+                        'teacher_name', COALESCE(t.full_name, TRIM(CONCAT(t.first_name, ' ', t.last_name)), 'Faculty'),
+                        'room_number', td.room_number,
+                        'color', td.color
+                    ) ORDER BY td.period_number
+                )
+                FROM school.timetable_detail td
+                LEFT JOIN school.teacher_details t ON td.teacher_id = t.teacher_id AND td.org_id = t.org_id
+                WHERE td.timetable_id = tm.timetable_id
+                  AND td.day_of_week = TRIM(TO_CHAR(CURRENT_DATE, 'Day'))
+            ), '[]'::jsonb),
+            'weekly_schedule', COALESCE((
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'period_id', td.period_id,
+                        'day_of_week', td.day_of_week,
+                        'period_number', td.period_number,
+                        'start_time', td.start_time,
+                        'end_time', td.end_time,
+                        'subject_name', td.subject_name,
+                        'subject_code', td.subject_code,
+                        'teacher_id', td.teacher_id,
+                        'teacher_name', COALESCE(t.full_name, TRIM(CONCAT(t.first_name, ' ', t.last_name)), 'Faculty'),
+                        'room_number', td.room_number,
+                        'color', td.color
+                    ) ORDER BY 
+                        CASE td.day_of_week
+                            WHEN 'Monday' THEN 1
+                            WHEN 'Tuesday' THEN 2
+                            WHEN 'Wednesday' THEN 3
+                            WHEN 'Thursday' THEN 4
+                            WHEN 'Friday' THEN 5
+                            WHEN 'Saturday' THEN 6
+                            WHEN 'Sunday' THEN 7
+                            ELSE 8
+                        END,
+                        td.period_number
+                )
+                FROM school.timetable_detail td
+                LEFT JOIN school.teacher_details t ON td.teacher_id = t.teacher_id AND td.org_id = t.org_id
+                WHERE td.timetable_id = tm.timetable_id
+            ), '[]'::jsonb)
+        )
+        INTO v_data
+        FROM school.academic_set s
+        LEFT JOIN school.timetable_master tm ON s.academic_set_id = tm.academic_set_id AND s.org_id = tm.org_id AND tm.is_active = TRUE
+        LEFT JOIN school.class_master cm ON s.class_id = cm.class_id AND s.org_id = cm.org_id
+        LEFT JOIN school.academic_year ay ON s.academic_year_id = ay.academic_year_id AND s.org_id = ay.org_id
+        WHERE s.academic_set_id = p_academic_set_id
+          AND s.org_id = p_org_id;
+
+        RETURN jsonb_build_object(
+            'success', TRUE,
+            'action', v_action,
+            'student_id', p_student_id,
+            'data', v_data,
+            'timestamp', CURRENT_TIMESTAMP
+        );
+
     ELSE
         RETURN jsonb_build_object(
             'success', FALSE,

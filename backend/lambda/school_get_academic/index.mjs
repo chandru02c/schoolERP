@@ -84,6 +84,12 @@ export const handler = async (event) => {
         return respond(400, false, 'exam_id is required');
     } else if (action === 'GET_STUDENT_RESULTS' && !studentId) {
         return respond(400, false, 'student_id is required');
+    } else if (action === 'GET_CLASS_TIMETABLE' && !academicSetId && !queryParams.class_id && !queryParams.classId) {
+        return respond(400, false, 'academic_set_id is required');
+    } else if (action === 'GET_TEACHER_TIMETABLE' && !teacherId) {
+        return respond(400, false, 'teacher_id is required');
+    } else if (action === 'GET_STUDENT_TIMETABLE' && !studentId) {
+        return respond(400, false, 'student_id is required');
     }
 
     try {

@@ -394,6 +394,47 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
             ))
           )}
         </View>
+
+        {/* Upcoming School Events Widget */}
+        <View style={styles.sectionWrap}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="flag-outline" size={18} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={styles.sectionHeading}>Upcoming School Events</Text>
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => navigation.navigate('ParentEvents')}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {upcomingEvents.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="calendar-outline" size={30} color={colors.textMuted} />
+              <Text style={styles.emptyCardText}>No upcoming events scheduled.</Text>
+            </View>
+          ) : (
+            upcomingEvents.map((evt) => (
+              <View key={evt.id} style={styles.eventRowCard}>
+                <View style={styles.eventIconCircle}>
+                  <Ionicons name="calendar" size={20} color={colors.primary} />
+                </View>
+                <View style={styles.eventInfoCol}>
+                  <Text style={styles.eventTitle}>{evt.title || evt.event_name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 3 }}>
+                    <Ionicons name="calendar-outline" size={13} color={colors.primary} style={{ marginRight: 4 }} />
+                    <Text style={styles.eventDateText}>{evt.event_date || evt.date}</Text>
+                    <Ionicons name="time-outline" size={13} color={colors.textSecondary} style={{ marginLeft: 10, marginRight: 4 }} />
+                    <Text style={styles.eventDateText}>{evt.time || '09:00 AM - 04:00 PM'}</Text>
+                  </View>
+                  <Text style={styles.eventDescText} numberOfLines={2}>
+                    {evt.description || 'School campus event'}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -703,6 +744,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     marginTop: 6,
+  },
+  eventRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  eventIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  eventInfoCol: {
+    flex: 1,
+  },
+  eventTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.dark,
+  },
+  eventDateText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  eventDescText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 16,
   },
 });
 

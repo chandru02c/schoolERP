@@ -58,6 +58,7 @@ const TeacherAssignmentPage = lazy(() => import('../pages/academic/TeacherAssign
 const StudentPromotionPage = lazy(() => import('../pages/academic/StudentPromotionPage'));
 const AcademicCalendarPage = lazy(() => import('../pages/academic/AcademicCalendarPage'));
 const AcademicExamsPage = lazy(() => import('../pages/academic/AcademicExamsPage'));
+const AcademicTimetablePage = lazy(() => import('../pages/academic/AcademicTimetablePage'));
 
 // Attendance Module
 const AttendanceDashboardPage = lazy(() => import('../pages/attendance/AttendanceDashboardPage'));
@@ -150,6 +151,7 @@ export const AdminRoutes: React.FC = () => {
           <Route path="academic/promotions" element={<PageSuspense><StudentPromotionPage /></PageSuspense>} />
           <Route path="academic/calendar" element={<PageSuspense><AcademicCalendarPage /></PageSuspense>} />
           <Route path="academic/exams" element={<PageSuspense><AcademicExamsPage /></PageSuspense>} />
+          <Route path="academic/timetable" element={<PageSuspense><AcademicTimetablePage /></PageSuspense>} />
 
           {/* Attendance Module */}
           <Route path="attendance" element={<Navigate to="attendance/dashboard" replace />} />
