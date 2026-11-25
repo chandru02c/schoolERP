@@ -167,6 +167,7 @@ const ParentsPage: React.FC = () => {
       render: (row: ParentRecord) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Avatar
+            src={row.student_photo?.startsWith('http') ? row.student_photo : (row.student_photo ? `https://school-erp-documents-prod.s3.ap-south-1.amazonaws.com/${row.student_photo}` : undefined)}
             sx={{
               width: 36,
               height: 36,

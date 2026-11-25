@@ -39,6 +39,7 @@ import {
   Paper,
   Divider,
   Autocomplete,
+  Avatar,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -53,10 +54,12 @@ import {
   FamilyRestroom as FamilyIcon,
   RemoveRedEye as ViewIcon,
   Delete as DeleteIcon,
+  PhotoCamera as CameraIcon,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import { mobileAuthApi, MobileUserCredential } from '../../api/mobileAuthApi';
 import { studentApi } from '../../api/studentApi';
+import { documentApi } from '../../api/documentApi';
 import { sessionService } from '../../utils/sessionService';
 import { DEFAULT_ORG_ID } from '../../constants';
 
@@ -113,7 +116,76 @@ export const ParentLoginManagementPage: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showResetPassword, setShowResetPassword] = useState(false);
 
+  // Profile Photo State
+  const [createPhotoUrl, setCreatePhotoUrl] = useState('');
+  const [createPhotoPreview, setCreatePhotoPreview] = useState('');
+  const [editPhotoUrl, setEditPhotoUrl] = useState('');
+  const [editPhotoPreview, setEditPhotoPreview] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
+
+  // Photo Upload Handler using S3 Pre-signed URL or Base64 fallback
+  const handlePhotoUpload = async (file: File, isEdit: boolean) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Profile photo must be less than 5MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (isEdit) {
+        setEditPhotoPreview(dataUrl);
+      } else {
+        setCreatePhotoPreview(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+
+    setUploadingPhoto(true);
+    try {
+      const presigned = await documentApi.getPresignedUrl({
+        org_id: currentOrgId,
+        module: 'PARENT',
+        entity_id: isEdit && selectedRecord ? selectedRecord.id : 1,
+        file_name: file.name,
+        content_type: file.type || 'image/jpeg',
+      });
+
+      if (presigned?.data?.uploadUrl) {
+        await documentApi.uploadToS3(presigned.data.uploadUrl, file);
+        const finalUrl = presigned.data.fileUrl || presigned.data.s3Key;
+        if (isEdit) {
+          setEditPhotoUrl(finalUrl);
+        } else {
+          setCreatePhotoUrl(finalUrl);
+        }
+        toast.success('Profile photo uploaded successfully.');
+      } else {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result as string);
+          r.readAsDataURL(file);
+        });
+        if (isEdit) setEditPhotoUrl(dataUrl);
+        else setCreatePhotoUrl(dataUrl);
+      }
+    } catch (err: any) {
+      console.warn('Presigned upload fallback to data URL:', err);
+      const dataUrl = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.readAsDataURL(file);
+      });
+      if (isEdit) setEditPhotoUrl(dataUrl);
+      else setCreatePhotoUrl(dataUrl);
+      toast.success('Profile photo selected.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   // Load parent credentials
   const loadData = useCallback(async () => {
@@ -174,6 +246,8 @@ export const ParentLoginManagementPage: React.FC = () => {
     setShowCreatePassword(false);
     setSelectedStudents([]);
     setManualStudentId('');
+    setCreatePhotoUrl('');
+    setCreatePhotoPreview('');
     setCreateModalOpen(true);
     loadStudentsMaster();
   };
@@ -187,6 +261,9 @@ export const ParentLoginManagementPage: React.FC = () => {
     setEditStatus(rec.status || 'ACTIVE');
     setEditPassword('');
     setShowEditPassword(false);
+    const existingPhoto = rec.profile_photo || rec.avatar_url || rec.avatar || '';
+    setEditPhotoUrl(existingPhoto);
+    setEditPhotoPreview(existingPhoto);
 
     // Populate student options from mapped_student_ids
     const mappedIds = rec.mapped_student_ids || [];
@@ -283,6 +360,7 @@ export const ParentLoginManagementPage: React.FC = () => {
         phone_number: createPhone.trim(),
         password: createPassword.trim(),
         mapped_student_ids: mappedIds,
+        profile_photo: createPhotoUrl.trim() || undefined,
       });
 
       if (res?.success) {
@@ -332,6 +410,7 @@ export const ParentLoginManagementPage: React.FC = () => {
         status: editStatus,
         mapped_student_ids: mappedIds,
         password: editPassword.trim() ? editPassword.trim() : undefined,
+        profile_photo: editPhotoUrl.trim() || undefined,
       });
 
       if (res?.success) {
@@ -504,7 +583,25 @@ export const ParentLoginManagementPage: React.FC = () => {
               ) : (
                 paginatedRecords.map((r) => (
                   <TableRow key={r.id} hover>
-                    <TableCell sx={{ fontWeight: 600 }}>{r.parent_name || r.full_name || 'Parent'}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Avatar
+                          src={r.profile_photo || r.avatar_url || r.avatar}
+                          alt={r.parent_name || r.full_name}
+                          sx={{ width: 36, height: 36, bgcolor: 'primary.main', fontSize: 14 }}
+                        >
+                          {(r.parent_name || r.full_name || 'P')[0]?.toUpperCase()}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" fontWeight={600}>
+                            {r.parent_name || r.full_name || 'Parent'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ID: #{r.id}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </TableCell>
                     <TableCell>{r.org_id}</TableCell>
                     <TableCell>{r.email}</TableCell>
                     <TableCell>{r.phone_number}</TableCell>
@@ -588,6 +685,56 @@ export const ParentLoginManagementPage: React.FC = () => {
               Organization ID <strong>{currentOrgId}</strong> will be captured and stored.
               A parent can be mapped to one or more children/students.
             </Alert>
+
+            {/* Profile Photo Upload */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 1.5, border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}>
+              <Avatar
+                src={createPhotoPreview}
+                sx={{ width: 60, height: 60, bgcolor: 'primary.light', fontSize: 24, fontWeight: 700 }}
+              >
+                {parentName ? parentName[0].toUpperCase() : 'P'}
+              </Avatar>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="subtitle2" fontWeight={600}>
+                  Parent Profile Photo (Optional)
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                  Displayed in Parent Mobile App and student profile views.
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    size="small"
+                    startIcon={uploadingPhoto ? <CircularProgress size={14} /> : <CameraIcon />}
+                    disabled={uploadingPhoto}
+                  >
+                    {uploadingPhoto ? 'Uploading...' : 'Choose Image'}
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handlePhotoUpload(file, false);
+                      }}
+                    />
+                  </Button>
+                  {createPhotoPreview ? (
+                    <Button
+                      size="small"
+                      color="error"
+                      onClick={() => {
+                        setCreatePhotoPreview('');
+                        setCreatePhotoUrl('');
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
+                </Box>
+              </Box>
+            </Box>
 
             <TextField
               label="Parent Full Name"
@@ -708,13 +855,53 @@ export const ParentLoginManagementPage: React.FC = () => {
         <DialogContent dividers>
           {selectedRecord && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
-              <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
-                <Typography variant="subtitle2" fontWeight="bold">
-                  {selectedRecord.parent_name || selectedRecord.full_name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Org ID: {selectedRecord.org_id} &bull; User ID: #{selectedRecord.id}
-                </Typography>
+              <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Avatar
+                  src={editPhotoPreview}
+                  sx={{ width: 64, height: 64, bgcolor: 'primary.main', fontSize: 24, fontWeight: 700 }}
+                >
+                  {(editParentName || selectedRecord.parent_name || 'P')[0]?.toUpperCase()}
+                </Avatar>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle2" fontWeight="bold">
+                    {selectedRecord.parent_name || selectedRecord.full_name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                    Org ID: {selectedRecord.org_id} &bull; User ID: #{selectedRecord.id}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Button
+                      variant="outlined"
+                      component="label"
+                      size="small"
+                      startIcon={uploadingPhoto ? <CircularProgress size={14} /> : <CameraIcon />}
+                      disabled={uploadingPhoto}
+                    >
+                      {uploadingPhoto ? 'Uploading...' : 'Change Photo'}
+                      <input
+                        type="file"
+                        hidden
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handlePhotoUpload(file, true);
+                        }}
+                      />
+                    </Button>
+                    {editPhotoPreview ? (
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={() => {
+                          setEditPhotoPreview('');
+                          setEditPhotoUrl('');
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
+                  </Box>
+                </Box>
               </Box>
 
               <TextField
@@ -884,6 +1071,22 @@ export const ParentLoginManagementPage: React.FC = () => {
         <DialogContent dividers>
           {selectedRecord && (
             <Grid container spacing={2}>
+              <Grid item xs={12} sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                <Avatar
+                  src={selectedRecord.profile_photo || selectedRecord.avatar_url || selectedRecord.avatar}
+                  sx={{ width: 64, height: 64, bgcolor: 'primary.main', fontSize: 26, fontWeight: 700 }}
+                >
+                  {(selectedRecord.parent_name || selectedRecord.full_name || 'P')[0]?.toUpperCase()}
+                </Avatar>
+                <Box>
+                  <Typography variant="h6" fontWeight="bold">
+                    {selectedRecord.parent_name || selectedRecord.full_name}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Parent / Guardian &bull; Org ID: {selectedRecord.org_id}
+                  </Typography>
+                </Box>
+              </Grid>
               <Grid item xs={6}>
                 <Typography variant="caption" color="text.secondary">Parent Name</Typography>
                 <Typography variant="body1" fontWeight="bold">{selectedRecord.parent_name || selectedRecord.full_name}</Typography>

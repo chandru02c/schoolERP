@@ -53,11 +53,15 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
     attendance_percentage: 100,
   });
 
+  const [calcStartDate, setCalcStartDate] = useState<string>('');
   const [historyRecords, setHistoryRecords] = useState<Array<{
     date: string;
-    morning_status: 'PRESENT' | 'ABSENT';
-    afternoon_status: 'PRESENT' | 'ABSENT';
-    status: 'PRESENT' | 'ABSENT';
+    dayName?: string;
+    morning_status?: 'PRESENT' | 'ABSENT' | 'HOLIDAY';
+    afternoon_status?: 'PRESENT' | 'ABSENT' | 'HOLIDAY';
+    status: 'PRESENT' | 'ABSENT' | 'HOLIDAY' | 'SUNDAY';
+    isSchoolDay?: boolean;
+    holidayName?: string;
     remarks?: string;
   }>>([]);
 
@@ -68,69 +72,40 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
     }
 
     try {
-      // 1. Fetch Student Attendance Report from backend
+      // 1. Fetch Student Attendance Report, active academic year, holidays and absent exceptions
       const reportRes = await attendanceService.getStudentReport(activeStudent.student_id);
-      const studentData = Array.isArray(reportRes?.students)
-        ? reportRes.students.find((s: any) => Number(s.student_id) === Number(activeStudent.student_id)) || reportRes.students[0]
-        : null;
 
-      if (studentData) {
-        const total = Number(studentData.total_working_days || 0);
-        const absent = Number(studentData.absent_days || 0);
-        const present = Math.max(0, total - absent);
-        const pct = total > 0 ? Number(((present / total) * 100).toFixed(1)) : 100;
+      const startDate =
+        reportRes?.academic_year?.start_date ||
+        reportRes?.academic_year?.academic_year_start ||
+        '2026-06-01';
 
-        setReport({
-          total_working_days: total,
-          absent_days: absent,
-          present_days: present,
-          attendance_percentage: pct,
-        });
-      }
+      const holidays =
+        Array.isArray(reportRes?.holidays) && reportRes.holidays.length > 0
+          ? reportRes.holidays
+          : await attendanceService.getHolidays();
 
-      // 2. Fetch Attendance History / Daily Sheet
-      const hist = await attendanceService.getHistory({
-        class_id: activeStudent.class_id,
-        student_id: activeStudent.student_id,
+      const absentRecords = Array.isArray(reportRes?.absent_records)
+        ? reportRes.absent_records
+        : [];
+
+      // 2. Calculate attendance using exception-based calculation
+      const calcResult = attendanceService.calculateParentAttendance({
+        startDate,
+        endDate: new Date(),
+        absentRecords,
+        holidays,
       });
 
-      if (Array.isArray(hist?.history)) {
-        const mapped = hist.history.map((h: any) => {
-          const mStatus = (h.morning_absent_count > 0 ? 'ABSENT' : 'PRESENT') as 'PRESENT' | 'ABSENT';
-          const aStatus = (h.afternoon_absent_count > 0 ? 'ABSENT' : 'PRESENT') as 'PRESENT' | 'ABSENT';
-          const overall = (mStatus === 'ABSENT' || aStatus === 'ABSENT') ? 'ABSENT' : 'PRESENT';
-          return {
-            date: h.attendance_date || h.date,
-            morning_status: mStatus,
-            afternoon_status: aStatus,
-            status: overall as 'PRESENT' | 'ABSENT',
-            remarks: h.remarks,
-          };
-        });
-        setHistoryRecords(mapped);
-      } else {
-        // Fallback to recent days
-        const days: Array<{
-          date: string;
-          morning_status: 'PRESENT' | 'ABSENT';
-          afternoon_status: 'PRESENT' | 'ABSENT';
-          status: 'PRESENT' | 'ABSENT';
-        }> = [];
-        const today = new Date();
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(today);
-          d.setDate(today.getDate() - i);
-          if (d.getDay() !== 0) { // skip Sunday
-            days.push({
-              date: d.toISOString().split('T')[0],
-              morning_status: 'PRESENT',
-              afternoon_status: i === 4 ? 'ABSENT' : 'PRESENT',
-              status: i === 4 ? 'ABSENT' : 'PRESENT',
-            });
-          }
-        }
-        setHistoryRecords(days);
-      }
+      setReport({
+        total_working_days: calcResult.total_working_days,
+        absent_days: calcResult.absent_days,
+        present_days: calcResult.present_days,
+        attendance_percentage: calcResult.attendance_percentage,
+      });
+
+      setHistoryRecords(calcResult.daily_records);
+      setCalcStartDate(calcResult.start_date);
     } catch (err) {
       console.warn('[ParentAttendanceScreen] Error loading attendance:', err);
     } finally {
@@ -265,6 +240,13 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
                   <Text style={styles.metricLabel}>Working Days</Text>
                 </View>
               </View>
+
+              <View style={styles.calculationNoteRow}>
+                <Ionicons name="information-circle-outline" size={13} color={colors.textSecondary} style={{ marginRight: 4 }} />
+                <Text style={styles.calculationNoteText}>
+                  Calculated from {calcStartDate || 'Academic Start'} to Today. Sundays & holidays excluded.
+                </Text>
+              </View>
             </View>
 
             {/* Daily Attendance History */}
@@ -296,45 +278,77 @@ export const ParentAttendanceScreen: React.FC<{ navigation: any }> = ({ navigati
                       </View>
 
                       <View style={styles.recordInfoCol}>
-                        <Text style={styles.recordTitle}>
-                          {record.status === 'PRESENT' ? 'Present' : 'Absent'}
+                        <Text
+                          style={[
+                            styles.recordTitle,
+                            record.status === 'HOLIDAY' && { color: '#D97706' },
+                            record.status === 'SUNDAY' && { color: '#6B7280' },
+                          ]}
+                        >
+                          {record.status === 'PRESENT'
+                            ? 'Present'
+                            : record.status === 'ABSENT'
+                            ? 'Absent'
+                            : record.status === 'HOLIDAY'
+                            ? record.holidayName || 'School Holiday'
+                            : 'Sunday'}
                         </Text>
-                        <Text style={styles.recordDateFull}>{record.date}</Text>
+                        <Text style={styles.recordDateFull}>
+                          {record.dayName ? `${record.dayName}, ` : ''}{record.date}
+                        </Text>
                       </View>
 
-                      {/* Session Badges */}
-                      <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      {/* Status Badges */}
+                      {record.status === 'HOLIDAY' || record.status === 'SUNDAY' ? (
                         <View
                           style={[
                             styles.sessionPill,
-                            { backgroundColor: isMorningPresent ? '#DCFCE7' : '#FEE2E2' },
+                            { backgroundColor: record.status === 'HOLIDAY' ? '#FEF3C7' : '#F3F4F6' },
                           ]}
                         >
                           <Text
                             style={[
                               styles.sessionPillText,
-                              { color: isMorningPresent ? colors.success : colors.error },
+                              { color: record.status === 'HOLIDAY' ? '#D97706' : '#6B7280' },
                             ]}
                           >
-                            🌅 M: {isMorningPresent ? 'P' : 'A'}
+                            {record.status === 'HOLIDAY' ? '🎉 Holiday' : '🏖️ Off'}
                           </Text>
                         </View>
-                        <View
-                          style={[
-                            styles.sessionPill,
-                            { backgroundColor: isAfternoonPresent ? '#DCFCE7' : '#FEE2E2' },
-                          ]}
-                        >
-                          <Text
+                      ) : (
+                        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                          <View
                             style={[
-                              styles.sessionPillText,
-                              { color: isAfternoonPresent ? colors.success : colors.error },
+                              styles.sessionPill,
+                              { backgroundColor: isMorningPresent ? '#DCFCE7' : '#FEE2E2' },
                             ]}
                           >
-                            ☀️ A: {isAfternoonPresent ? 'P' : 'A'}
-                          </Text>
+                            <Text
+                              style={[
+                                styles.sessionPillText,
+                                { color: isMorningPresent ? colors.success : colors.error },
+                              ]}
+                            >
+                              🌅 M: {isMorningPresent ? 'P' : 'A'}
+                            </Text>
+                          </View>
+                          <View
+                            style={[
+                              styles.sessionPill,
+                              { backgroundColor: isAfternoonPresent ? '#DCFCE7' : '#FEE2E2' },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.sessionPillText,
+                                { color: isAfternoonPresent ? colors.success : colors.error },
+                              ]}
+                            >
+                              ☀️ A: {isAfternoonPresent ? 'P' : 'A'}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
+                      )}
                     </View>
                   );
                 })
@@ -520,6 +534,20 @@ const styles = StyleSheet.create({
     width: 1,
     height: 28,
     backgroundColor: colors.borderLight,
+  },
+  calculationNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  calculationNoteText: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
   },
   historySection: {
     marginTop: 4,

@@ -235,6 +235,8 @@ export const timetableService = {
 
     const queryParams: any = {
       org_id: orgId,
+      for_student: 'true',
+      role: 'parent',
     };
     if (params.class_id) queryParams.class_id = params.class_id;
     if (params.academic_set_id) queryParams.academic_set_id = params.academic_set_id;

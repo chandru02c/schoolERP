@@ -229,7 +229,8 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.switcherRow}>
               {childrenList.map((ch) => {
                 const isSelected = String(activeStudent?.student_id) === String(ch.student_id);
-                const photo = ch.avatar_url && ch.avatar_url.startsWith('http') ? ch.avatar_url : null;
+                const rawPhoto = ch.avatar_url || ch.student_photo;
+                const photo = rawPhoto && String(rawPhoto).startsWith('http') && !String(rawPhoto).includes('/NULL') ? String(rawPhoto) : null;
                 return (
                   <TouchableOpacity
                     key={String(ch.student_id)}
@@ -278,11 +279,14 @@ export const ParentHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) 
           >
             <View style={styles.heroLeft}>
               <View style={styles.heroAvatarWrap}>
-                {activeStudent.avatar_url && activeStudent.avatar_url.startsWith('http') ? (
-                  <Image source={{ uri: activeStudent.avatar_url }} style={styles.heroAvatarImg} />
-                ) : (
-                  <Ionicons name="person" size={32} color={colors.primary} />
-                )}
+                {(() => {
+                  const heroPhoto = activeStudent.avatar_url || activeStudent.student_photo;
+                  return heroPhoto && String(heroPhoto).startsWith('http') && !String(heroPhoto).includes('/NULL') ? (
+                    <Image source={{ uri: String(heroPhoto) }} style={styles.heroAvatarImg} />
+                  ) : (
+                    <Ionicons name="person" size={32} color={colors.primary} />
+                  );
+                })()}
               </View>
               <View style={styles.heroInfo}>
                 <Text style={styles.heroStudentName}>{activeStudent.student_name}</Text>

@@ -25,6 +25,7 @@ import {
   TableRow,
   TableCell,
   TableBody,
+  Avatar,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -193,8 +194,13 @@ export const StudentEnrollmentPage: React.FC = () => {
       render: (row: any) => {
         const r = row as EnrolledStudent;
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <StudentIcon color="primary" fontSize="small" />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Avatar
+              src={(r as any).student_photo || (r as any).avatar_url}
+              sx={{ width: 32, height: 32, fontSize: '0.8rem', bgcolor: 'primary.main' }}
+            >
+              {r.student_name ? r.student_name[0] : 'S'}
+            </Avatar>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {r.student_name}

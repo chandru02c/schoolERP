@@ -24,6 +24,7 @@ import {
   InputLabel,
   Alert,
   Divider,
+  Avatar,
 } from '@mui/material';
 import {
   TrendingUp as PromoteIcon,
@@ -348,7 +349,17 @@ export const StudentPromotionPage: React.FC = () => {
                       />
                     </TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>{st.roll_number || '-'}</TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>{st.student_name}</TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar
+                          src={(st as any).student_photo || (st as any).avatar_url}
+                          sx={{ width: 28, height: 28, fontSize: 12, bgcolor: 'primary.main' }}
+                        >
+                          {st.student_name ? st.student_name[0] : 'S'}
+                        </Avatar>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{st.student_name}</Typography>
+                      </Box>
+                    </TableCell>
                     <TableCell>{st.student_code || st.registration_no || '-'}</TableCell>
                     <TableCell>
                       <Chip

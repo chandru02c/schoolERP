@@ -16,6 +16,8 @@ export interface ParentRecord {
   section_id?: string | null;
   student_status: string;
   is_active: boolean;
+  student_photo?: string | null;
+  avatar_url?: string | null;
 
   // Father Details
   father_name?: string | null;

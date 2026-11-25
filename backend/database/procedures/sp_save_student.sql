@@ -149,6 +149,16 @@ BEGIN
           AND org_id = p_org_id
           AND is_deleted = FALSE;
 
+        -- Update student photo on admission_application if provided
+        IF p_data->>'student_photo' IS NOT NULL AND TRIM(p_data->>'student_photo') <> '' THEN
+            UPDATE school.admission_application
+            SET student_photo = TRIM(p_data->>'student_photo'),
+                updated_at = CURRENT_TIMESTAMP,
+                updated_by = p_user_id
+            WHERE id = (SELECT admission_id FROM school.student_master WHERE student_id = p_student_id AND org_id = p_org_id)
+              AND org_id = p_org_id;
+        END IF;
+
         p_response := jsonb_build_object(
             'success', TRUE,
             'message', 'Student academic details updated successfully.',
@@ -172,6 +182,16 @@ BEGIN
         WHERE student_id = p_student_id
           AND org_id = p_org_id
           AND is_deleted = FALSE;
+
+        -- Update student photo on admission_application if provided
+        IF p_data->>'student_photo' IS NOT NULL AND TRIM(p_data->>'student_photo') <> '' THEN
+            UPDATE school.admission_application
+            SET student_photo = TRIM(p_data->>'student_photo'),
+                updated_at = CURRENT_TIMESTAMP,
+                updated_by = p_user_id
+            WHERE id = (SELECT admission_id FROM school.student_master WHERE student_id = p_student_id AND org_id = p_org_id)
+              AND org_id = p_org_id;
+        END IF;
 
         p_response := jsonb_build_object(
             'success', TRUE,

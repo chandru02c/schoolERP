@@ -56,6 +56,7 @@ export interface StudentUser extends BaseUser {
   academic_year?: string;
   parent_name?: string;
   parent_phone?: string;
+  student_photo?: string;
 }
 
 export interface AdminUser extends BaseUser {

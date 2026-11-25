@@ -140,12 +140,14 @@ export const handler = async (event) => {
                 return respond(400, false, 'At least one student_id must be mapped for Parent credential.');
             }
 
+            const profilePhoto = String(body.profile_photo || body.avatar || body.avatar_url || '').trim() || null;
+
             const insertResult = await dbExecute(
                 `INSERT INTO school.mobile_user_credentials (
-                    org_id, user_type, parent_name, email, phone_number, password_hash, mapped_student_ids, status, created_by
-                ) VALUES ($1, 'PARENT', $2, $3, $4, $5, $6::jsonb, 'ACTIVE', $7)
-                RETURNING id, org_id, user_type, parent_name, email, phone_number, mapped_student_ids, status, created_at;`,
-                [orgId, parentName, email, phoneNumber, passwordHash, JSON.stringify(mappedStudentIds), userId]
+                    org_id, user_type, parent_name, email, phone_number, password_hash, mapped_student_ids, status, profile_photo, created_by
+                ) VALUES ($1, 'PARENT', $2, $3, $4, $5, $6::jsonb, 'ACTIVE', $7, $8)
+                RETURNING id, org_id, user_type, parent_name, email, phone_number, mapped_student_ids, status, profile_photo, created_at;`,
+                [orgId, parentName, email, phoneNumber, passwordHash, JSON.stringify(mappedStudentIds), profilePhoto, userId]
             );
 
             return respond(201, true, 'Parent login credential created successfully.', insertResult[0]);

@@ -78,9 +78,19 @@ axiosInstance.interceptors.request.use(
       config.headers['Content-Type'] = 'application/json';
     }
 
+    // Multi-Tenant Rule: Automatically include org_id in request params
+    const resolvedOrgId = Number(orgId) || 1001;
+    if (!isAuthEndpoint) {
+      if (!config.params) {
+        config.params = {};
+      }
+      if (!config.params.org_id) {
+        config.params.org_id = resolvedOrgId;
+      }
+    }
+
     // Multi-Tenant Rule: Automatically include org_id in request body for POST, PUT, PATCH, DELETE (except public auth validation)
     const method = config.method?.toUpperCase();
-    const resolvedOrgId = Number(orgId) || 1001;
     if (!isAuthEndpoint && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method || '')) {
       if (typeof config.data === 'string') {
         try {

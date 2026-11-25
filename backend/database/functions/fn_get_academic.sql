@@ -728,7 +728,7 @@ BEGIN
                 'academic_year_id', tm.academic_year_id,
                 'year_name', ay.year_name,
                 'academic_set_id', tm.academic_set_id,
-                'set_name', COALESCE(s.set_name, 'Class ' || s.class_id || ' - ' || s.section),
+                'set_name', CONCAT(COALESCE(cm.class_name, 'Class ' || s.class_id), ' - ', s.section),
                 'class_id', s.class_id,
                 'class_name', COALESCE(cm.class_name, 'Class ' || s.class_id),
                 'section', s.section,
@@ -786,7 +786,7 @@ BEGIN
             'academic_year_id', tm.academic_year_id,
             'year_name', ay.year_name,
             'academic_set_id', s.academic_set_id,
-            'set_name', COALESCE(s.set_name, 'Class ' || s.class_id || ' - ' || s.section),
+            'set_name', CONCAT(COALESCE(cm.class_name, 'Class ' || s.class_id), ' - ', s.section),
             'class_id', s.class_id,
             'class_name', COALESCE(cm.class_name, 'Class ' || s.class_id),
             'section', s.section,
@@ -979,6 +979,18 @@ BEGIN
         ORDER BY se.enrollment_date DESC
         LIMIT 1;
 
+        -- Fallback: if student is not found in student_enrollment, look up class_id and section_id from student_master
+        IF p_academic_set_id IS NULL THEN
+            SELECT aset.academic_set_id INTO p_academic_set_id
+            FROM school.student_master sm
+            JOIN school.academic_set aset ON (aset.class_id::text = sm.class_id::text OR aset.class_id::text = (REGEXP_MATCH(sm.class_id, '[0-9]+'))[1])
+              AND (aset.section = sm.section_id OR sm.section_id IS NULL OR sm.section_id = '')
+              AND aset.org_id = sm.org_id AND aset.is_deleted = FALSE
+            WHERE sm.student_id = p_student_id AND sm.org_id = p_org_id AND sm.is_deleted = FALSE
+            ORDER BY aset.academic_set_id DESC
+            LIMIT 1;
+        END IF;
+
         IF p_academic_set_id IS NULL THEN
             RETURN jsonb_build_object(
                 'success', TRUE,
@@ -1001,7 +1013,7 @@ BEGIN
             'academic_year_id', tm.academic_year_id,
             'year_name', ay.year_name,
             'academic_set_id', s.academic_set_id,
-            'set_name', COALESCE(s.set_name, 'Class ' || s.class_id || ' - ' || s.section),
+            'set_name', CONCAT(COALESCE(cm.class_name, 'Class ' || s.class_id), ' - ', s.section),
             'class_id', s.class_id,
             'class_name', COALESCE(cm.class_name, 'Class ' || s.class_id),
             'section', s.section,

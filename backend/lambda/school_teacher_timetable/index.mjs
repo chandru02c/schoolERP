@@ -154,7 +154,7 @@ export const handler = async (event) => {
         `;
         const ttParams = [orgId, academicYearId];
 
-        if (teacherId > 0) {
+        if (teacherId > 0 && !queryParams.student_id && queryParams.for_student !== 'true' && queryParams.role !== 'parent') {
             ttQuery += ` AND td.teacher_id = $${ttParams.length + 1}`;
             ttParams.push(teacherId);
         }
@@ -256,7 +256,7 @@ export const handler = async (event) => {
         `;
         const params = [orgId, academicYearId];
 
-        if (teacherId > 0) {
+        if (teacherId > 0 && !queryParams.student_id && queryParams.for_student !== 'true' && queryParams.role !== 'parent') {
             query += ` AND a.teacher_id = $${params.length + 1}`;
             params.push(teacherId);
         }

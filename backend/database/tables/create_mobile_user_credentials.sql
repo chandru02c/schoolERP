@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS school.mobile_user_credentials (
     mapped_student_ids  JSONB NULL DEFAULT '[]'::jsonb,
     status              VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
                             CHECK (status IN ('ACTIVE', 'INACTIVE')),
+    profile_photo       TEXT NULL,
     created_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_by          BIGINT NULL,
