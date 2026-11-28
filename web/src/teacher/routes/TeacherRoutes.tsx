@@ -33,6 +33,7 @@ const TeacherParentsPage = lazy(() => import('../pages/TeacherParentsPage'));
 const TeacherLeavePage = lazy(() => import('../pages/TeacherLeavePage'));
 const TeacherReportsPage = lazy(() => import('../pages/TeacherReportsPage'));
 const TeacherSettingsPage = lazy(() => import('../pages/TeacherSettingsPage'));
+const NotificationListPage = lazy(() => import('../../pages/notifications/NotificationListPage'));
 
 const PageSuspense: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <Suspense fallback={<Loader fullScreen text="Loading Teacher Portal..." />}>{children}</Suspense>
@@ -65,6 +66,7 @@ export const TeacherRoutes: React.FC = () => {
           <Route path="events" element={<PageSuspense><TeacherEventsPage /></PageSuspense>} />
           <Route path="parents" element={<PageSuspense><TeacherParentsPage /></PageSuspense>} />
           <Route path="leave" element={<PageSuspense><TeacherLeavePage /></PageSuspense>} />
+          <Route path="notifications" element={<PageSuspense><NotificationListPage /></PageSuspense>} />
           <Route path="reports" element={<PageSuspense><TeacherReportsPage /></PageSuspense>} />
           <Route path="settings" element={<PageSuspense><TeacherSettingsPage /></PageSuspense>} />
 

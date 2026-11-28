@@ -189,6 +189,14 @@ export const TeacherHomeScreen = ({ navigation }: any) => {
         color: '#D97706',
       },
       {
+        id: 'leave',
+        title: 'Leave',
+        icon: 'calendar-number-outline' as const,
+        route: 'TeacherLeave',
+        count: undefined,
+        color: '#7C3AED',
+      },
+      {
         id: 'calendar',
         title: 'Academic Calendar',
         icon: 'calendar-outline' as const,

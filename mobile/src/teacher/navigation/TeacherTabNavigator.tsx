@@ -12,10 +12,13 @@ import { TeacherCalendarScreen } from '../screens/TeacherCalendarScreen';
 import { TeacherMarksScreen } from '../screens/TeacherMarksScreen';
 import { TeacherLeaveScreen } from '../screens/TeacherLeaveScreen';
 import { TeacherProfileScreen } from '../screens/TeacherProfileScreen';
+import { NotificationCenterScreen } from '../../screens/NotificationCenterScreen';
+import { useAppSelector } from '../../store';
 
 const Tab = createBottomTabNavigator<TeacherTabParamList>();
 
 export const TeacherTabNavigator: React.FC = () => {
+  const { unreadCount } = useAppSelector((state) => state.notification);
   return (
     <Tab.Navigator
       screenOptions={{
@@ -93,6 +96,17 @@ export const TeacherTabNavigator: React.FC = () => {
           tabBarLabel: 'Leaves',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="document-text-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="TeacherNotifications"
+        component={NotificationCenterScreen}
+        options={{
+          tabBarLabel: 'Alerts',
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="notifications-outline" size={size} color={color} />
           ),
         }}
       />

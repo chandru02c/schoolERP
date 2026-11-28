@@ -78,6 +78,7 @@ const ParentsPage = lazy(() => import('../pages/parents/ParentsPage'));
 const ReportsPage = lazy(() => import('../pages/reports/ReportsPage'));
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
 const AdminProfilePage = lazy(() => import('../pages/profile/AdminProfilePage'));
+const NotificationListPage = lazy(() => import('../pages/notifications/NotificationListPage'));
 
 // Mobile Login Management Module
 const TeacherLoginManagementPage = lazy(() => import('../../pages/mobileAuth/TeacherLoginManagementPage'));
@@ -167,6 +168,9 @@ export const AdminRoutes: React.FC = () => {
           {/* Mobile Login Management Module */}
           <Route path="mobile-auth/teacher-login" element={<PageSuspense><TeacherLoginManagementPage /></PageSuspense>} />
           <Route path="mobile-auth/parent-login" element={<PageSuspense><ParentLoginManagementPage /></PageSuspense>} />
+
+          {/* Notification Module */}
+          <Route path="notifications" element={<PageSuspense><NotificationListPage /></PageSuspense>} />
 
           {/* Other Modules */}
           <Route path="fees" element={<PageSuspense><FeesPage /></PageSuspense>} />

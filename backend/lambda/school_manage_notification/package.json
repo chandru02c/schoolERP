@@ -1,0 +1,10 @@
+{
+  "name": "school_manage_notification",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.758.0",
+    "pg": "^8.13.3"
+  }
+}

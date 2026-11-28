@@ -15,6 +15,10 @@ export type TeacherStackParamList = {
   TeacherResults: undefined;
   TeacherNotifications: undefined;
   TeacherEvents: undefined;
+  TeacherHoliday?: undefined;
+  TeacherCalendar?: undefined;
+  TeacherLeave?: undefined;
+  StudentDetail?: { studentId: number | string };
 };
 
 export type TeacherTabParamList = {
@@ -24,6 +28,7 @@ export type TeacherTabParamList = {
   TeacherCalendar: undefined;
   TeacherMarks: undefined;
   TeacherLeave: undefined;
+  TeacherNotifications: undefined;
   TeacherProfile: undefined;
 };
 
@@ -47,6 +52,7 @@ export type ParentTabParamList = {
   ParentCalendar: undefined;
   ParentMarks: undefined;
   ParentLeave: undefined;
+  ParentNotifications: undefined;
   ParentProfile: undefined;
 };
 

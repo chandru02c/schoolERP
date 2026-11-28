@@ -102,6 +102,7 @@ export const TeacherLeaveManagementPage: React.FC = () => {
     const res = await dispatch(
       approveLeave({
         leave_id: selectedLeave.leave_id,
+        teacher_id: Number(selectedLeave.teacher_id),
         admin_remark: adminRemark.trim() || undefined,
       })
     );
@@ -131,6 +132,7 @@ export const TeacherLeaveManagementPage: React.FC = () => {
     const res = await dispatch(
       rejectLeave({
         leave_id: selectedLeave.leave_id,
+        teacher_id: Number(selectedLeave.teacher_id),
         admin_remark: adminRemark.trim(),
       })
     );

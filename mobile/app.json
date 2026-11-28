@@ -4,9 +4,11 @@
     "slug": "school-erp-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icons/logo.jpg",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
+      "image": "./assets/icons/logo.jpg",
       "backgroundColor": "#163B88",
       "resizeMode": "contain"
     },
@@ -15,8 +17,10 @@
       "bundleIdentifier": "com.schoolerp.mobile"
     },
     "android": {
-      "package": "com.schoolerp.mobile",
+      "package": "com.fluvyntech.schoolerp",
+      "googleServicesFile": "./src/google-services.json",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icons/logo.jpg",
         "backgroundColor": "#163B88"
       }
     },

@@ -80,3 +80,17 @@ export async function dbExecute(queryText, values, orgId) {
         client.release();
     }
 }
+
+export async function dbQueryRaw(queryText, values) {
+    const p = await getPool();
+    const client = await p.connect();
+    try {
+        const res = await client.query(queryText, values);
+        return res.rows;
+    } catch (err) {
+        console.error('[DB QUERY RAW ERROR]', err);
+        throw err;
+    } finally {
+        client.release();
+    }
+}
