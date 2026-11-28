@@ -85,6 +85,7 @@ export interface CancelLeavePayload {
 
 export interface ApproveRejectLeavePayload {
   leave_id: number;
+  teacher_id?: number;
   admin_remark?: string;
 }
 

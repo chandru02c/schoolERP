@@ -158,6 +158,65 @@ export const teacherService = {
     });
     return response.data?.data || response.data;
   },
+
+  /**
+   * Apply for teacher leave (Teacher portal / Mobile)
+   * Reuses POST /teacher/leave with action: 'APPLY'
+   */
+  async applyLeave(payload: {
+    teacher_id: number | string;
+    leave_type: string;
+    from_date: string;
+    to_date: string;
+    total_days: number;
+    reason: string;
+  }): Promise<any> {
+    const session = await storage.getUserSession();
+    const orgId = session?.org_id || APP_CONFIG.defaultOrgId;
+    const teacherId = payload.teacher_id || session?.teacher_id || session?.user_id;
+
+    const response = await api.post('/teacher/leave', {
+      action: 'APPLY',
+      org_id: Number(orgId),
+      ...payload,
+      teacher_id: Number(teacherId),
+    }, {
+      headers: {
+        org_id: String(orgId),
+        'x-user-id': String(teacherId),
+      },
+    });
+
+    return response.data;
+  },
+
+  /**
+   * Cancel pending leave request
+   * Reuses POST /teacher/leave with action: 'CANCEL'
+   */
+  async cancelLeave(payload: {
+    leave_id: number | string;
+    teacher_id?: number | string;
+    admin_remark?: string;
+  }): Promise<any> {
+    const session = await storage.getUserSession();
+    const orgId = session?.org_id || APP_CONFIG.defaultOrgId;
+    const teacherId = payload.teacher_id || session?.teacher_id || session?.user_id;
+
+    const response = await api.post('/teacher/leave', {
+      action: 'CANCEL',
+      org_id: Number(orgId),
+      teacher_id: Number(teacherId),
+      ...payload,
+    }, {
+      headers: {
+        org_id: String(orgId),
+        'x-user-id': String(teacherId),
+      },
+    });
+
+    return response.data;
+  },
 };
 
 export default teacherService;

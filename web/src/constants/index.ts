@@ -50,6 +50,12 @@ export const API_ENDPOINTS = {
   // Dashboard
   ADMIN_DASHBOARD: '/admin/dashboard',
   TEACHER_DASHBOARD: '/teacher/dashboard',
+  // Notifications
+  NOTIFICATIONS: '/notifications',
+  NOTIFICATIONS_DEVICE_TOKEN: '/notifications/device-token',
+  NOTIFICATIONS_READ: '/notifications/read',
+  NOTIFICATIONS_READ_ALL: '/notifications/read-all',
+  NOTIFICATIONS_SEND: '/notifications/send',
 } as const;
 
 // Route Paths

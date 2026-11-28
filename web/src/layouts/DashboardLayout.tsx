@@ -3,7 +3,7 @@ import {
   Box, Drawer, AppBar, Toolbar, Typography, IconButton, Avatar,
   List, ListItemButton, ListItemIcon, ListItemText, Tooltip, Badge,
   Divider, Menu, MenuItem, InputBase, useMediaQuery, useTheme,
-  alpha, Chip,
+  alpha, Chip, Button,
 } from '@mui/material';
 import { Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
@@ -47,6 +47,7 @@ import { logout } from '../redux/slices/authSlice';
 import { useAuth } from '../hooks/useAuth';
 import { sessionService } from '../utils/sessionService';
 import { ROUTES, DRAWER_WIDTH } from '../constants';
+import { notificationApi, WebNotification } from '../api/notificationApi';
 import toast from 'react-hot-toast';
 
 interface NavItem {
@@ -139,6 +140,7 @@ const getAdminNavItems = (teacherId: string | number): NavItem[] => [
       { label: 'Parent Login Management', path: `/admin/${teacherId}/mobile-auth/parent-login`, icon: <FamilyRestroomIcon /> },
     ],
   },
+  { label: 'Notifications', path: `/admin/${teacherId}/notifications`, icon: <NotificationsIcon /> },
   // { label: 'Reports', path: `/admin/${teacherId}/reports`, icon: <BarChartIcon /> },
   { label: 'My Profile', path: `/admin/${teacherId}/profile`, icon: <AccountCircleIcon /> },
   // { label: 'Settings', path: `/admin/${teacherId}/settings`, icon: <SettingsIcon /> },
@@ -146,6 +148,7 @@ const getAdminNavItems = (teacherId: string | number): NavItem[] => [
 
 const getTeacherNavItems = (teacherId: string | number): NavItem[] => [
   { label: 'Dashboard', path: `/teacher/${teacherId}`, icon: <DashboardIcon /> },
+  { label: 'Notifications', path: `/teacher/${teacherId}/notifications`, icon: <NotificationsIcon /> },
 ];
 
 const DashboardLayout: React.FC = () => {
@@ -160,6 +163,22 @@ const DashboardLayout: React.FC = () => {
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [notifAnchor, setNotifAnchor] = useState<null | HTMLElement>(null);
+  const [headerNotifs, setHeaderNotifs] = useState<WebNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  const fetchHeaderNotifs = React.useCallback(async () => {
+    try {
+      const res = await notificationApi.getNotifications({ limit: 5 });
+      setHeaderNotifs(res.notifications || []);
+      setUnreadCount(res.unread_count || 0);
+    } catch (err) {
+      console.warn('[DashboardLayout] Error loading notifications for header:', err);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchHeaderNotifs();
+  }, [fetchHeaderNotifs]);
 
   const effectiveOpen = isMobile ? false : sidebarOpen;
   const drawerWidth = effectiveOpen ? DRAWER_WIDTH : 70;
@@ -493,21 +512,94 @@ const DashboardLayout: React.FC = () => {
 
             {/* Notifications */}
             <Tooltip title="Notifications">
-              <IconButton onClick={(e) => setNotifAnchor(e.currentTarget)}>
-                <Badge badgeContent={4} color="error">
+              <IconButton onClick={(e) => { setNotifAnchor(e.currentTarget); fetchHeaderNotifs(); }}>
+                <Badge badgeContent={unreadCount} color="error">
                   <NotificationsIcon />
                 </Badge>
               </IconButton>
             </Tooltip>
 
-            <Menu anchorEl={notifAnchor} open={Boolean(notifAnchor)} onClose={() => setNotifAnchor(null)}>
-              <Box sx={{ px: 2, py: 1.5, minWidth: 280 }}>
-                <Typography fontWeight={700} mb={1}>Notifications</Typography>
-                {['Fee pending for Class 5A', 'Tomorrow: Annual Sports Day', '3 new admissions today', 'Attendance below 75% - Ravi'].map((n) => (
-                  <Box key={n} sx={{ py: 0.75, borderBottom: '1px solid rgba(0,0,0,0.06)', '&:last-child': { borderBottom: 'none' } }}>
-                    <Typography variant="body2" color="text.secondary">{n}</Typography>
+            <Menu
+              anchorEl={notifAnchor}
+              open={Boolean(notifAnchor)}
+              onClose={() => setNotifAnchor(null)}
+              PaperProps={{
+                sx: { width: 340, maxHeight: 420, borderRadius: 2, mt: 1 },
+              }}
+            >
+              <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                <Typography fontWeight={700} variant="subtitle2">
+                  Notifications {unreadCount > 0 ? `(${unreadCount} unread)` : ''}
+                </Typography>
+                {unreadCount > 0 && (
+                  <Button
+                    size="small"
+                    sx={{ fontSize: '0.75rem', p: 0.5 }}
+                    onClick={async () => {
+                      await notificationApi.markAllAsRead();
+                      setHeaderNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })));
+                      setUnreadCount(0);
+                    }}
+                  >
+                    Mark all read
+                  </Button>
+                )}
+              </Box>
+
+              <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
+                {headerNotifs.length === 0 ? (
+                  <Box sx={{ p: 3, textAlign: 'center' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No notifications yet
+                    </Typography>
                   </Box>
-                ))}
+                ) : (
+                  headerNotifs.map((n) => (
+                    <Box
+                      key={n.notification_id}
+                      onClick={() => {
+                        setNotifAnchor(null);
+                        navigate(isTeacher ? `/teacher/${currentTeacherId}/notifications` : `/admin/${currentTeacherId}/notifications`);
+                      }}
+                      sx={{
+                        p: 1.5,
+                        borderBottom: '1px solid rgba(0,0,0,0.05)',
+                        bgcolor: n.is_read ? 'transparent' : 'rgba(25, 118, 210, 0.04)',
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: 'action.hover' },
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        {!n.is_read && (
+                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main', flexShrink: 0 }} />
+                        )}
+                        <Typography variant="body2" fontWeight={n.is_read ? 500 : 700} noWrap sx={{ flex: 1 }}>
+                          {n.title}
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {n.message}
+                      </Typography>
+                      <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5, fontSize: '0.68rem' }}>
+                        {new Date(n.created_on).toLocaleDateString([], { month: 'short', day: 'numeric' })} • {new Date(n.created_on).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Typography>
+                    </Box>
+                  ))
+                )}
+              </Box>
+
+              <Divider />
+              <Box sx={{ p: 1, textAlign: 'center' }}>
+                <Button
+                  fullWidth
+                  size="small"
+                  onClick={() => {
+                    setNotifAnchor(null);
+                    navigate(isTeacher ? `/teacher/${currentTeacherId}/notifications` : `/admin/${currentTeacherId}/notifications`);
+                  }}
+                >
+                  View All Notifications
+                </Button>
               </Box>
             </Menu>
 

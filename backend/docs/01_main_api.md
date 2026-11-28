@@ -1,4 +1,4 @@
-﻿## 1. admission API Endpoints
+## 1. admission API Endpoints
 | `POST` | `/admission/application` | `school_create_admission` | Creates a new admission application |
 | `PUT` | `/admission/application` | `school_update_admission` | Updates an existing admission application |
 | `DELETE` | `/admission/application?id={id}` | `school_delete_admission` | Soft-deletes an application (`is_deleted=TRUE`) |
@@ -309,3 +309,226 @@ All user validation, role detection, organization details retrieval, and teacher
 | `GET` | `/teacher/timetable` | `school_teacher_timetable` | Retrieve weekly timetable periods based on `org_id`, `academy_id`, `teacher_id`, and `class_id` |
 | `GET` | `/mobile-user/teacher-timetable` | `school_teacher_timetable` | Fetch teacher timetable dynamically filtered by selected day and class |
 | `GET` | `/mobile-user/today-schedule` | `school_teacher_timetable` | Retrieve today's schedule entries (subject, time, class, period) for teacher dashboard |
+
+---------------------------------------------------------------------------------------------------------------------------
+## Notification Module API (school_manage_notification)
+
+Unified multi-tenant Notification & Push Notification management for Mobile (React Native Expo / FCM) and Web Admin/Teacher portals.
+Backed by `school.notification_master`, `school.device_tokens`, and stored procedure `school.sp_manage_notification`.
+
+| Method | Endpoint | Lambda Function | DB Procedure / Query | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `POST` | `/notifications/device-token` | `school_manage_notification` | `school.sp_manage_notification('REGISTER_DEVICE_TOKEN')` | Register or update device FCM push token for logged-in user (Teacher, Parent, Admin). |
+| `GET` | `/notifications` | `school_manage_notification` | `school.sp_manage_notification('GET_NOTIFICATIONS')` | Get notification history for user with unread count and `since_timestamp` delta filter. |
+| `POST` | `/notifications/read` | `school_manage_notification` | `school.sp_manage_notification('MARK_READ')` | Mark a single notification as read. |
+| `POST` | `/notifications/read-all` | `school_manage_notification` | `school.sp_manage_notification('MARK_ALL_READ')` | Mark all notifications as read for current user in tenant. |
+| `POST` | `/notifications/send` | `school_manage_notification` | `school.sp_manage_notification('SEND_NOTIFICATION')` | Internal / Admin dispatch: stores notification in database first, then triggers FCM push notification. |
+
+---
+
+### Request & Response Specifications (school_manage_notification)
+
+#### 1. Register / Update Device Token (`POST /notifications/device-token`)
+- **Headers:** `Content-Type: application/json`, `org_id: <number>` (Strictly `org_id` only; matching attendance/academic APIs)
+- **Request Body:**
+```json
+{
+  "org_id": 1,
+  "user_id": 201,
+  "role_type": "PARENT",
+  "fcm_token": "fX9aB1...device_push_token...",
+  "device_type": "ANDROID",
+  "device_model": "Samsung Galaxy S23",
+  "app_version": "1.0.0"
+}
+```
+- **Database Logic (`school.sp_manage_notification` - `REGISTER_DEVICE_TOKEN`):**
+  1. Validates `org_id`, `user_id`, and `fcm_token`.
+  2. Upserts into `school.device_tokens` table.
+  3. Sets `token_status = 'ACTIVE'` and updates `updated_on` and `last_used_at`.
+- **Success Response (HTTP 200):**
+```json
+{
+  "success": true,
+  "message": "Device token registered successfully.",
+  "timestamp": "2026-11-28T02:00:00.000Z"
+}
+```
+
+---
+
+#### 2. Get Notifications (`GET /notifications`)
+- **Headers:** `Content-Type: application/json`, `org_id: <number>` (Strictly `org_id` only; matching attendance/academic APIs)
+- **Query Parameters:**
+  - `org_id` (Mandatory, number): Tenant Organization ID
+  - `user_id` (Mandatory, number): User ID (Teacher ID, Parent Credential ID, etc.)
+  - `since_timestamp` (Optional, ISO string): For delta refresh — returns only notifications created after this timestamp
+  - `limit` (Optional, default 50): Maximum number of records to return
+- **Database Logic (`school.sp_manage_notification` - `GET_NOTIFICATIONS`):**
+  1. Filters by `org_id` and `user_id`.
+  2. Queries total unread count (`is_read = FALSE`).
+  3. If `since_timestamp` is provided, fetches only new notifications where `created_on > since_timestamp`.
+  4. Returns records ordered by `created_on DESC`.
+- **Success Response (HTTP 200):**
+```json
+{
+  "success": true,
+  "message": "Notifications retrieved successfully.",
+  "data": {
+    "notifications": [
+      {
+        "notification_id": 1042,
+        "org_id": 1,
+        "user_id": 201,
+        "role_type": "PARENT",
+        "title": "Attendance Alert: Alice Miller Absent",
+        "message": "Dear Parent, Alice Miller (Class 5 A) was marked Absent on 2026-11-28 for Morning session.",
+        "notification_type": "STUDENT_ABSENT",
+        "reference_id": "1001",
+        "is_read": false,
+        "created_on": "2026-11-28T09:15:00.000Z",
+        "created_by": 105,
+        "metadata": {
+          "student_id": 1001,
+          "student_name": "Alice Miller",
+          "class_name": "Class 5",
+          "session": "MORNING",
+          "attendance_date": "2026-11-28",
+          "screen": "ParentAttendance"
+        }
+      },
+      {
+        "notification_id": 1039,
+        "org_id": 1,
+        "user_id": 201,
+        "role_type": "PARENT",
+        "title": "Marks Published: Mid-Term Examination (Mathematics)",
+        "message": "Marks summary for Alice Miller in Mathematics: Scored: 88/100 (Grade: A).",
+        "notification_type": "MARKS_ENTRY",
+        "reference_id": "45",
+        "is_read": true,
+        "created_on": "2026-11-27T16:30:00.000Z",
+        "created_by": 105,
+        "metadata": {
+          "exam_id": 45,
+          "student_id": 1001,
+          "scored_marks": 88,
+          "max_marks": 100,
+          "grade": "A",
+          "screen": "ParentMarks"
+        }
+      }
+    ],
+    "unread_count": 1,
+    "total_fetched": 2,
+    "latest_timestamp": "2026-11-28T09:15:00.000Z"
+  },
+  "timestamp": "2026-11-28T10:00:00.000Z"
+}
+```
+
+---
+
+#### 3. Mark Notification as Read (`POST /notifications/read`)
+- **Headers:** `Content-Type: application/json`, `org_id: <number>` (Strictly `org_id` only; matching attendance/academic APIs)
+- **Request Body:**
+```json
+{
+  "org_id": 1,
+  "user_id": 201,
+  "notification_id": 1042
+}
+```
+- **Database Logic (`school.sp_manage_notification` - `MARK_READ`):**
+  1. Validates `org_id`, `user_id`, and `notification_id`.
+  2. Updates `school.notification_master SET is_read = TRUE WHERE org_id = $1 AND user_id = $2 AND notification_id = $3`.
+- **Success Response (HTTP 200):**
+```json
+{
+  "success": true,
+  "message": "Notification marked as read.",
+  "data": {
+    "notification_id": 1042
+  },
+  "timestamp": "2026-11-28T10:05:00.000Z"
+}
+```
+
+---
+
+#### 4. Mark All Notifications as Read (`POST /notifications/read-all`)
+- **Headers:** `Content-Type: application/json`, `org_id: <number>` (Strictly `org_id` only; matching attendance/academic APIs)
+- **Request Body:**
+```json
+{
+  "org_id": 1,
+  "user_id": 201
+}
+```
+- **Database Logic (`school.sp_manage_notification` - `MARK_ALL_READ`):**
+  1. Validates `org_id` and `user_id`.
+  2. Updates `school.notification_master SET is_read = TRUE WHERE org_id = $1 AND user_id = $2 AND is_read = FALSE`.
+- **Success Response (HTTP 200):**
+```json
+{
+  "success": true,
+  "message": "All notifications marked as read.",
+  "timestamp": "2026-11-28T10:06:00.000Z"
+}
+```
+
+---
+
+#### 5. Send Notification (Admin / Internal Service Dispatch) (`POST /notifications/send`)
+- **Headers:** `Content-Type: application/json`, `org_id: <number>` (Strictly `org_id` only; matching attendance/academic APIs)
+- **Request Body:**
+```json
+{
+  "org_id": 1,
+  "user_id": 201,
+  "role_type": "PARENT",
+  "title": "Annual Sports Day Notice",
+  "message": "Annual Sports Day is scheduled on Saturday. Parents and students are welcome.",
+  "notification_type": "EVENT",
+  "reference_id": "12",
+  "metadata": {
+    "event_id": 12,
+    "screen": "ParentCalendar"
+  }
+}
+```
+- **Database & Push Notification Logic:**
+  1. Inserts notification into `school.notification_master` table.
+  2. Queries active device tokens for recipient from `school.device_tokens`.
+  3. Sends FCM push notification to registered devices.
+  4. Automatically marks expired or unregistered tokens as `EXPIRED` in `school.device_tokens`.
+- **Success Response (HTTP 200):**
+```json
+{
+  "success": true,
+  "message": "Notification stored and push dispatched.",
+  "data": {
+    "notification": {
+      "notification_id": 1043,
+      "created_on": "2026-11-28T10:10:00.000Z"
+    },
+    "push": {
+      "success": true,
+      "sent": 1,
+      "invalidCount": 0
+    }
+  },
+  "timestamp": "2026-11-28T10:10:00.000Z"
+}
+```
+
+---
+
+### Automated Notification Triggers & Event Handlers
+
+| Trigger Scenario | Originating Lambda | Action / Condition | Target Role & Recipient | Notification Type |
+| :--- | :--- | :--- | :--- | :--- |
+| **Student Absent** | `school_manage_attendance` | Teacher marks student `ABSENT` during `SAVE_ATTENDANCE` | All linked parents (resolved via `mobile_user_credentials.mapped_student_ids` and `parent_student_mapping`) | `STUDENT_ABSENT` |
+| **Teacher Leave Approved** | `school_save_teacher_leave` | Admin approves leave request (`APPROVE`) | Applicant Teacher (`teacher_id`) | `TEACHER_LEAVE_APPROVED` |
+| **Teacher Leave Rejected** | `school_save_teacher_leave` | Admin rejects leave request (`REJECT`) with admin remark | Applicant Teacher (`teacher_id`) | `TEACHER_LEAVE_REJECTED` |
+| **Marks Entry / Published** | `school_manage_academic` | Marks entered or published (`SAVE_STUDENT_MARKS`, `PUBLISH_EXAM_MARKS`) | All linked parents of each evaluated student (includes subject, exam, scored marks, max marks, grade) | `MARKS_ENTRY` |

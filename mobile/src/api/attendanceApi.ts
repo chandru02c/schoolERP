@@ -112,9 +112,23 @@ export const attendanceApi = {
    */
   async saveAttendance(payload: SaveAttendancePayload): Promise<boolean> {
     try {
+      const attendanceDate = payload.date || (payload as any).attendance_date;
+      const exceptions = (payload.attendance || [])
+        .filter((a) => a.status === 'ABSENT')
+        .map((a) => ({
+          student_id: Number(a.student_id),
+          status_code: 'ABSENT' as const,
+          status: 'ABSENT',
+          morning_status: payload.session === 'MORNING' ? 'ABSENT' : 'PRESENT',
+          afternoon_status: payload.session === 'AFTERNOON' ? 'ABSENT' : 'PRESENT',
+          remarks: a.remarks || 'Absent',
+        }));
+
       const response = await apiClient.post<ApiResponse<any>>('/attendance', {
-        action: 'MARK_ATTENDANCE',
+        action: 'SAVE_ATTENDANCE',
         ...payload,
+        attendance_date: attendanceDate,
+        exceptions,
       });
       return response.data?.success ?? true;
     } catch (e) {

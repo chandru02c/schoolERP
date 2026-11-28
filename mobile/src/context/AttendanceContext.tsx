@@ -295,8 +295,21 @@ export const AttendanceProvider: React.FC<{ children: ReactNode }> = ({ children
       const cacheKey = `${payload.class_id}_${payload.section}_${payload.date}_${payload.session}`;
 
       try {
+        const exceptions = (payload.attendance || [])
+          .filter((a) => a.status === 'ABSENT')
+          .map((a) => ({
+            student_id: Number(a.student_id),
+            status_code: 'ABSENT' as const,
+            status: 'ABSENT',
+            morning_status: payload.session === 'MORNING' ? 'ABSENT' : 'PRESENT',
+            afternoon_status: payload.session === 'AFTERNOON' ? 'ABSENT' : 'PRESENT',
+            remarks: a.remarks || 'Absent',
+          }));
+
         await api.post('/attendance', {
           action: 'SAVE_ATTENDANCE',
+          attendance_date: payload.date,
+          exceptions,
           ...payload,
         });
       } catch (err) {

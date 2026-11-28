@@ -7,6 +7,7 @@
 
 import { dbExecute, dbQueryRaw } from './db.mjs';
 import { validateOrg, extractOrgId } from './orgValidator.mjs';
+import { notifyMarksEntry } from './notificationService.mjs';
 
 const CORS_HEADERS = {
     'Content-Type': 'application/json',
@@ -236,6 +237,25 @@ export const handler = async (event) => {
                 null,
                 { code: result?.error_code || 'ERR_OPERATION_FAILED' }
             );
+        }
+
+        // Trigger Marks Entry / Published Notification to Parents
+        if (action === 'SAVE_STUDENT_MARKS' || action === 'PUBLISH_EXAM_MARKS' || action === 'SUBMIT_EXAM_MARKS') {
+            try {
+                await notifyMarksEntry(
+                    {
+                        org_id: orgId,
+                        exam_id: body.exam_id,
+                        marks_list: body.marks || [],
+                        is_published: action !== 'SAVE_STUDENT_MARKS',
+                        teacher_id: userId
+                    },
+                    dbExecute,
+                    dbQueryRaw
+                );
+            } catch (notifErr) {
+                console.warn('[school_manage_academic] Marks notification dispatch warning:', notifErr.message);
+            }
         }
 
         return respond(200, true, result.message, result.data || null);

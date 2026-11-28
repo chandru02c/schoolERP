@@ -134,7 +134,7 @@ export const attendanceService = {
       teacher_id: Number(teacherId || 1),
       status: payload.status || 'SUBMITTED',
       session: payload.session || 'BOTH',
-      exceptions: payload.exceptions.map((e) => ({
+      exceptions: (payload.exceptions || []).map((e) => ({
         student_id: Number(e.student_id),
         status_code: 'ABSENT' as const,
         morning_status: e.morning_status,

@@ -13,10 +13,13 @@ import { ParentCalendarScreen } from '../screens/ParentCalendarScreen';
 import { ParentMarksScreen } from '../screens/ParentMarksScreen';
 import { ParentLeaveScreen } from '../screens/ParentLeaveScreen';
 import { ParentProfileScreen } from '../screens/ParentProfileScreen';
+import { NotificationCenterScreen } from '../../screens/NotificationCenterScreen';
+import { useAppSelector } from '../../store';
 
 const Tab = createBottomTabNavigator<ParentTabParamList>();
 
 export const ParentTabNavigator: React.FC = () => {
+  const { unreadCount } = useAppSelector((state) => state.notification);
   return (
     <Tab.Navigator
       screenOptions={{
@@ -104,6 +107,17 @@ export const ParentTabNavigator: React.FC = () => {
           tabBarLabel: 'Leave',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="mail-unread-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="ParentNotifications"
+        component={NotificationCenterScreen}
+        options={{
+          tabBarLabel: 'Alerts',
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="notifications-outline" size={size} color={color} />
           ),
         }}
       />

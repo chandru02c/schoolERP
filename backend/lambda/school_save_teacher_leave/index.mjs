@@ -10,7 +10,8 @@
  *              - REJECT  : Admin rejects leave request with remark
  */
 
-import { dbExecute } from './db.mjs';
+import { dbExecute, dbQueryRaw } from './db.mjs';
+import { notifyTeacherLeaveStatus } from './notificationService.mjs';
 
 // ─── CORS Headers ─────────────────────────────────────────────────────────────
 
@@ -118,7 +119,26 @@ export const handler = async (event) => {
     }
 
     const leaveId = body.leave_id || pathParams.leave_id || queryParams.leave_id || null;
-    const teacherId = body.teacher_id || queryParams.teacher_id || userId || null;
+    let teacherId = body.teacher_id || queryParams.teacher_id || null;
+    if (!teacherId && (action === 'APPLY' || action === 'UPDATE' || action === 'CANCEL')) {
+        teacherId = userId || null;
+    }
+
+    // For APPROVE / REJECT: if teacher_id was not explicitly supplied, look up the leave applicant
+    if ((action === 'APPROVE' || action === 'REJECT') && !teacherId && leaveId) {
+        try {
+            const leaveLookup = await dbQueryRaw(
+                `SELECT teacher_id FROM school.teacher_leave WHERE leave_id = $1::BIGINT AND org_id = $2::BIGINT LIMIT 1;`,
+                [Number(leaveId), Number(orgId)]
+            );
+            if (leaveLookup && leaveLookup.length > 0) {
+                teacherId = leaveLookup[0].teacher_id;
+            }
+        } catch (lookupErr) {
+            console.warn('[school_save_teacher_leave] Lookup teacher_id warning:', lookupErr.message);
+        }
+    }
+
     const leaveType = body.leave_type || null;
     const fromDate = body.from_date || null;
     const toDate = body.to_date || null;
@@ -149,6 +169,26 @@ export const handler = async (event) => {
                 null,
                 { code: result?.error_code || 'ERR_OPERATION_FAILED' }
             );
+        }
+
+        // Trigger Teacher Leave Notification when Approved or Rejected
+        if (action === 'APPROVE' || action === 'REJECT') {
+            try {
+                await notifyTeacherLeaveStatus(
+                    {
+                        org_id: orgId,
+                        leave_id: leaveId,
+                        teacher_id: teacherId,
+                        status: action,
+                        admin_remark: adminRemark,
+                        updated_by: userId
+                    },
+                    dbExecute,
+                    dbQueryRaw
+                );
+            } catch (notifErr) {
+                console.warn('[school_save_teacher_leave] Leave notification warning:', notifErr.message);
+            }
         }
 
         const statusCode = action === 'APPLY' ? 201 : 200;

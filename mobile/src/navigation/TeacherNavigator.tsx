@@ -24,6 +24,7 @@ import TeacherResultsScreen from '../screens/teacher/TeacherResultsScreen';
 import TeacherNotificationScreen from '../screens/teacher/TeacherNotificationScreen';
 import TeacherEventsScreen from '../screens/teacher/TeacherEventsScreen';
 import TeacherHolidayScreen from '../screens/teacher/TeacherHolidayScreen';
+import TeacherLeaveScreen from '../screens/teacher/TeacherLeaveScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -116,6 +117,7 @@ export const TeacherNavigator: React.FC = () => {
       <Stack.Screen name="TeacherNotifications" component={TeacherNotificationScreen} />
       <Stack.Screen name="TeacherEvents" component={TeacherEventsScreen} />
       <Stack.Screen name="TeacherHoliday" component={TeacherHolidayScreen} />
+      <Stack.Screen name="TeacherLeave" component={TeacherLeaveScreen} />
       <Stack.Screen name="TeacherCalendar" component={TeacherCalendarScreen} />
       <Stack.Screen name="TeacherProfile" component={TeacherProfileScreen} />
     </Stack.Navigator>

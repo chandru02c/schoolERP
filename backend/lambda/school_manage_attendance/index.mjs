@@ -12,6 +12,7 @@ import {
     getActiveAcademicYear,
     validateTeacherClassAssignment
 } from './orgValidator.mjs';
+import { notifyStudentAbsent } from './notificationService.mjs';
 
 const CORS_HEADERS = {
     'Content-Type': 'application/json',
@@ -126,6 +127,50 @@ export const handler = async (event) => {
     try {
         const result = await dbExecute(MANAGE_ATTENDANCE_SQL, [action, orgId, JSON.stringify(body), userId], orgId);
         const isSuccess = result?.success !== false;
+
+        // Automatically trigger push notification to linked parents for absent students
+        if ((action === 'SAVE_ATTENDANCE' || action === 'MARK_ATTENDANCE') && isSuccess) {
+            try {
+                // Support exceptions, attendance, and students list formats
+                const itemsList = Array.isArray(body.exceptions)
+                    ? body.exceptions
+                    : (Array.isArray(body.attendance)
+                        ? body.attendance
+                        : (Array.isArray(body.students) ? body.students : []));
+
+                const absentItems = itemsList.filter((item) => {
+                    const m = String(item.morning_status || item.morning_status_code || item.status_code || item.status || '').toUpperCase();
+                    const a = String(item.afternoon_status || item.afternoon_status_code || item.status_code || item.status || '').toUpperCase();
+                    return m === 'ABSENT' || a === 'ABSENT';
+                });
+
+                const attendanceDate = body.attendance_date || body.date || new Date().toISOString().substring(0, 10);
+
+                for (const item of absentItems) {
+                    const studentId = Number(item.student_id || item.id || item.studentId);
+                    if (studentId && !isNaN(studentId) && studentId > 0) {
+                        const m = String(item.morning_status || item.morning_status_code || item.status_code || item.status || '').toUpperCase();
+                        const a = String(item.afternoon_status || item.afternoon_status_code || item.status_code || item.status || '').toUpperCase();
+                        const session = item.session || body.session || ((m === 'ABSENT' && a === 'ABSENT') ? 'BOTH' : (m === 'ABSENT' ? 'MORNING' : 'AFTERNOON'));
+
+                        await notifyStudentAbsent(
+                            {
+                                org_id: orgId,
+                                student_id: studentId,
+                                attendance_date: attendanceDate,
+                                session,
+                                teacher_id: body.teacher_id || userId
+                            },
+                            dbExecute,
+                            dbQueryRaw
+                        );
+                    }
+                }
+            } catch (notifErr) {
+                console.warn('[school_manage_attendance] Absent notification dispatch warning:', notifErr.message);
+            }
+        }
+
         return respond(isSuccess ? 200 : 400, isSuccess, result?.message || 'Operation processed.', result?.data || result);
     } catch (err) {
         console.error('[school_manage_attendance] Error:', err);

@@ -10,6 +10,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { storage } from '../storage';
 import { authService, LoginResponse } from '../services/authService';
+import { notificationService } from '../services/notificationService';
 import { APP_CONFIG, UserRole, USER_ROLES } from '../constants';
 
 export interface BaseUser {
@@ -149,6 +150,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setRole(savedSession.user_type);
           setToken(authToken || savedSession.token || savedSession.access_token || null);
           setIsAuthenticated(true);
+
+          // Register / update device token with backend
+          notificationService.registerDeviceTokenWithBackend(savedSession).catch((err) => {
+            console.warn('[AuthProvider] FCM registration warning on restore:', err?.message);
+          });
         }
       } catch (e) {
         console.warn('[AuthProvider] Restore session error:', e);
@@ -293,6 +299,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsAuthenticated(true);
 
         await storage.saveUserSession(fullUser);
+
+        // Register device token with backend immediately upon successful login
+        notificationService.registerDeviceTokenWithBackend(fullUser).catch((err) => {
+          console.warn('[AuthProvider] FCM registration warning on login:', err?.message);
+        });
 
         setIsLoading(false);
         return true;
